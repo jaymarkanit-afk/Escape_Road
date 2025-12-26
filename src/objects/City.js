@@ -5,7 +5,7 @@
  */
 
 import * as THREE from "three";
-import { WORLD_CONFIG, COLORS } from "../utils/constants.js";
+import { WORLD_CONFIG, COLORS, ROAD_CONFIG } from "../utils/constants.js";
 import { random, randomInt } from "../utils/helpers.js";
 import { CityObstacles } from "./CityObstacles.js";
 
@@ -160,6 +160,42 @@ export class City {
     const roadWidth = 16;
     const roads = [];
 
+    // Shared center-line assets for city roads
+    const centerGeoV = new THREE.PlaneGeometry(
+      ROAD_CONFIG.CENTER_LINE_WIDTH,
+      ROAD_CONFIG.CENTER_LINE_LENGTH
+    );
+    const centerGeoH = new THREE.PlaneGeometry(
+      ROAD_CONFIG.CENTER_LINE_LENGTH,
+      ROAD_CONFIG.CENTER_LINE_WIDTH
+    );
+    const centerMat = new THREE.MeshBasicMaterial({
+      color: ROAD_CONFIG.CENTER_LINE_COLOR,
+    });
+
+    const addCenterLines = (length, isVertical, centerX, centerZ) => {
+      const spacing = ROAD_CONFIG.CENTER_LINE_SPACING;
+      const count = Math.floor(length / spacing);
+      const group = new THREE.Group();
+      const geo = isVertical ? centerGeoV : centerGeoH;
+
+      for (let i = 0; i < count; i++) {
+        const offset = (i - (count - 1) / 2) * spacing; // symmetric placement
+        const strip = new THREE.Mesh(geo, centerMat);
+        strip.rotation.x = -Math.PI / 2;
+
+        strip.position.set(
+          isVertical ? centerX : centerX + offset,
+          0.03,
+          isVertical ? centerZ + offset : centerZ
+        );
+        group.add(strip);
+      }
+
+      this.scene.add(group);
+      roads.push(group);
+    };
+
     // Main vertical road (center)
     const verticalRoad = new THREE.PlaneGeometry(roadWidth, 200);
     const vRoad = new THREE.Mesh(verticalRoad, this.roadMaterial);
@@ -168,6 +204,7 @@ export class City {
     vRoad.receiveShadow = false;
     this.scene.add(vRoad);
     roads.push(vRoad);
+    addCenterLines(200, true, origin.x, origin.z);
 
     // Main horizontal road (center)
     const horizontalRoad = new THREE.PlaneGeometry(200, roadWidth);
@@ -177,6 +214,7 @@ export class City {
     hRoad.receiveShadow = false;
     this.scene.add(hRoad);
     roads.push(hRoad);
+    addCenterLines(200, false, origin.x, origin.z);
 
     return roads;
   }
