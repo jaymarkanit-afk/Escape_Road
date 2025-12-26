@@ -1,0 +1,28 @@
+{
+  "name": "chase-escape-game",
+  "version": "1.0.0",
+  "description": "3D car-chase survival game built with Three.js",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "python -m http.server 8000"
+  },
+  "keywords": [
+    "game",
+    "three.js",
+    "3d",
+    "car-chase",
+    "survival"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
