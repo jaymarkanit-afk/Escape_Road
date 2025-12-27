@@ -35,8 +35,9 @@ export class GameEngine {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = false; // DISABLED for performance
 
-    this.scene.background = new THREE.Color(COLORS.SKY);
-    this.scene.fog = new THREE.Fog(COLORS.SKY, 50, 150);
+    // Clear bright sky without fog
+    this.scene.background = new THREE.Color(0xb8e0ff); // Bright clear blue sky
+    // No fog for clear visibility
   }
 
   /**
@@ -64,18 +65,18 @@ export class GameEngine {
    * Setup scene lighting
    */
   _initLighting() {
-    // Ambient light for base illumination
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    // Bright ambient light for clear, well-lit environment
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
     this.scene.add(ambientLight);
 
-    // Directional light (sun) for proper shading - NO SHADOWS for performance
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    // Bright directional light (sun) - NO SHADOWS for performance
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(50, 100, 50);
     directionalLight.castShadow = false; // Disabled for performance
     this.scene.add(directionalLight);
 
-    // Hemisphere light for sky/ground color variation
-    const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x5a7a4a, 0.3);
+    // Hemisphere light for natural sky/ground lighting
+    const hemisphereLight = new THREE.HemisphereLight(0xb8e0ff, 0x88cc88, 0.4);
     this.scene.add(hemisphereLight);
   }
 
