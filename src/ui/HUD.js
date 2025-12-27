@@ -60,52 +60,6 @@ export class HUD {
       "SCORE: 0"
     );
 
-    // Health bar (top right)
-    this.elements.healthContainer = this._createElement(
-      "div",
-      `
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        width: 200px;
-      `
-    );
-
-    this.elements.healthLabel = this._createElement(
-      "div",
-      `
-        font-size: 14px;
-        margin-bottom: 5px;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-      `,
-      "HEALTH"
-    );
-    this.elements.healthContainer.appendChild(this.elements.healthLabel);
-
-    this.elements.healthBarBg = this._createElement(
-      "div",
-      `
-        width: 100%;
-        height: 20px;
-        background: rgba(0,0,0,0.5);
-        border: 2px solid white;
-        border-radius: 10px;
-        overflow: hidden;
-      `
-    );
-    this.elements.healthContainer.appendChild(this.elements.healthBarBg);
-
-    this.elements.healthBarFill = this._createElement(
-      "div",
-      `
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, #ff0000, #ff6600);
-        transition: width 0.3s ease;
-      `
-    );
-    this.elements.healthBarBg.appendChild(this.elements.healthBarFill);
-
     // Boost indicator (bottom center)
     this.elements.boost = this._createElement(
       "div",
@@ -203,29 +157,12 @@ export class HUD {
 
   /**
    * Update HUD with current game state
-   * @param {Object} gameState - Object containing score, health, time, etc.
+   * @param {Object} gameState - Object containing score, time, etc.
    */
   update(gameState) {
     // Update score
     if (gameState.score !== undefined) {
       this.elements.score.innerHTML = `SCORE: ${formatScore(gameState.score)}`;
-    }
-
-    // Update health bar
-    if (gameState.health !== undefined) {
-      const healthPercent = Math.max(0, Math.min(100, gameState.health));
-      this.elements.healthBarFill.style.width = `${healthPercent}%`;
-
-      // Change color based on health
-      if (healthPercent < 25) {
-        this.elements.healthBarFill.style.background = "#ff0000";
-      } else if (healthPercent < 50) {
-        this.elements.healthBarFill.style.background =
-          "linear-gradient(90deg, #ff6600, #ffaa00)";
-      } else {
-        this.elements.healthBarFill.style.background =
-          "linear-gradient(90deg, #ff0000, #ff6600)";
-      }
     }
 
     // Update boost indicator

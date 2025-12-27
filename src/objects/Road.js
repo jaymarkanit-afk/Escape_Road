@@ -118,6 +118,28 @@ export class Road {
         segment.add(marker);
       }
     }
+
+    // Center dashed line for clearer road guidance
+    const centerGeometry = new THREE.PlaneGeometry(
+      config.CENTER_LINE_WIDTH,
+      config.CENTER_LINE_LENGTH
+    );
+    const centerMaterial = new THREE.MeshBasicMaterial({
+      color: config.CENTER_LINE_COLOR,
+    });
+    const centerSpacing = config.CENTER_LINE_SPACING;
+    const centerCount = Math.floor(config.SEGMENT_LENGTH / centerSpacing);
+
+    for (let i = 0; i < centerCount; i++) {
+      const centerStrip = new THREE.Mesh(centerGeometry, centerMaterial);
+      centerStrip.rotation.x = -Math.PI / 2;
+      centerStrip.position.set(
+        0,
+        0.015,
+        -i * centerSpacing - centerSpacing / 2
+      );
+      segment.add(centerStrip);
+    }
   }
 
   /**

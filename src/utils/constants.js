@@ -135,6 +135,20 @@ export const COLORS = {
   SKY: 0x87ceeb,
 };
 
+// Road visuals and spacing
+export const ROAD_CONFIG = {
+  VISIBLE_SEGMENTS: 8,
+  SEGMENT_LENGTH: 90,
+  SEGMENT_WIDTH: 18,
+  LANE_WIDTH: 4,
+  ROAD_COLOR: COLORS.ROAD,
+  LANE_MARKER_COLOR: 0xffffff,
+  CENTER_LINE_COLOR: 0xffd23c,
+  CENTER_LINE_WIDTH: 0.35,
+  CENTER_LINE_LENGTH: 5,
+  CENTER_LINE_SPACING: 8,
+};
+
 export const INPUT_KEYS = {
   FORWARD: ["ArrowUp", "w", "W"],
   BACKWARD: ["ArrowDown", "s", "S"],
