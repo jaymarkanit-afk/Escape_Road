@@ -96,7 +96,6 @@ export class CollisionSystem {
       z: (playerPos.z + obstaclePos.z) / 2,
     };
 
-    this.playerRef.takeDamage(PLAYER_CONFIG.COLLISION_DAMAGE);
     this.collisionCooldown = this.cooldownDuration;
 
     if (this.effectsSystem) {
@@ -139,14 +138,13 @@ export class CollisionSystem {
    * @private
    */
   _checkPlayerBuildingCollisions() {
-    if (this.collisionCooldown > 0) return;
-
     const playerBox = this.playerRef.getBoundingBox();
     const buildings = this.cityRef.getBuildings();
+    const playerRadius = 1.5;
 
     for (const building of buildings) {
-      const halfWidth = building.geometry.parameters.width / 2;
-      const halfDepth = building.geometry.parameters.depth / 2;
+      const halfWidth = building.geometry.parameters.width / 2 + playerRadius;
+      const halfDepth = building.geometry.parameters.depth / 2 + playerRadius;
 
       const buildingBox = {
         min: {
@@ -163,7 +161,7 @@ export class CollisionSystem {
 
       if (checkAABBCollision(playerBox, buildingBox)) {
         this._handlePlayerBuildingCollision(building, buildingBox);
-        break;
+        // Don't break - check all buildings for multi-building collisions
       }
     }
   }
@@ -174,6 +172,7 @@ export class CollisionSystem {
    */
   _handlePlayerBuildingCollision(building, buildingBox) {
     const playerPos = this.playerRef.getPosition();
+    const playerRadius = 1.5; // Player collision radius
 
     // Calculate collision normal (push direction)
     const buildingCenter = {
@@ -183,29 +182,47 @@ export class CollisionSystem {
 
     const dx = playerPos.x - buildingCenter.x;
     const dz = playerPos.z - buildingCenter.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
 
     // Determine which face was hit
     const buildingWidth = buildingBox.max.x - buildingBox.min.x;
     const buildingDepth = buildingBox.max.z - buildingBox.min.z;
 
-    const normalizedDx = dx / buildingWidth;
-    const normalizedDz = dz / buildingDepth;
+    const normalizedDx = distance > 0 ? dx / distance : 1;
+    const normalizedDz = distance > 0 ? dz / distance : 0;
 
-    // Push player out of building
-    if (Math.abs(normalizedDx) > Math.abs(normalizedDz)) {
+    // Calculate which face is closest
+    const absNormDx = Math.abs(dx) / buildingWidth;
+    const absNormDz = Math.abs(dz) / buildingDepth;
+
+    // Stop the player completely
+    this.playerRef.velocity.x = 0;
+    this.playerRef.velocity.z = 0;
+
+    // Push player out of building and set reverse direction
+    if (absNormDx > absNormDz) {
       // Hit left or right side
       this.playerRef.position.x =
-        normalizedDx > 0 ? buildingBox.max.x + 1.5 : buildingBox.min.x - 1.5;
-      this.playerRef.velocity.x = normalizedDx > 0 ? 5 : -5;
+        normalizedDx > 0
+          ? buildingBox.max.x + playerRadius
+          : buildingBox.min.x - playerRadius;
+      // Set reverse direction
+      this.playerRef.collisionReverseDirection.x = normalizedDx > 0 ? -1 : 1;
+      this.playerRef.collisionReverseDirection.z = 0;
     } else {
       // Hit front or back
       this.playerRef.position.z =
-        normalizedDz > 0 ? buildingBox.max.z + 1.5 : buildingBox.min.z - 1.5;
-      this.playerRef.velocity.z = normalizedDz > 0 ? 5 : -5;
+        normalizedDz > 0
+          ? buildingBox.max.z + playerRadius
+          : buildingBox.min.z - playerRadius;
+      // Set reverse direction
+      this.playerRef.collisionReverseDirection.x = 0;
+      this.playerRef.collisionReverseDirection.z = normalizedDz > 0 ? -1 : 1;
     }
 
-    // Apply minor damage
-    this.playerRef.takeDamage(PLAYER_CONFIG.COLLISION_DAMAGE / 2);
+    // Start collision state
+    this.playerRef.isColliding = true;
+    this.playerRef.collisionReverseTimer = 0.3; // 300ms reverse duration
 
     // Set cooldown
     this.collisionCooldown = this.cooldownDuration;
@@ -248,9 +265,8 @@ export class CollisionSystem {
   _handlePlayerEnemyCollision() {
     const playerPos = this.playerRef.getPosition();
 
-    // Police collision = instant game over
-    // Set player health to 0 to trigger game over
-    this.playerRef.die();
+    // Police collision = start 3 second countdown before caught
+    this.playerRef.setCaught();
 
     // Set cooldown
     this.collisionCooldown = this.cooldownDuration;
@@ -362,9 +378,8 @@ export class CollisionSystem {
   _handlePlayerTrafficCollision(trafficCar) {
     const playerPos = this.playerRef.getPosition();
     const carPos = trafficCar.getPosition();
+    const playerRadius = 1.5;
 
-    // Light damage from traffic
-    this.playerRef.takeDamage(PLAYER_CONFIG.COLLISION_DAMAGE / 3);
     this.collisionCooldown = this.cooldownDuration;
 
     if (this.effectsSystem) {
@@ -375,7 +390,7 @@ export class CollisionSystem {
       this.soundSystem.playCollisionSound(0.4);
     }
 
-    // Push player away from traffic car
+    // Push player away from traffic car with stronger force
     const pushDirection = {
       x: playerPos.x - carPos.x,
       z: playerPos.z - carPos.z,
@@ -383,9 +398,23 @@ export class CollisionSystem {
     const pushMagnitude = Math.sqrt(
       pushDirection.x ** 2 + pushDirection.z ** 2
     );
+
     if (pushMagnitude > 0) {
-      this.playerRef.velocity.x += (pushDirection.x / pushMagnitude) * 6;
-      this.playerRef.velocity.z += (pushDirection.z / pushMagnitude) * 6;
+      // Stronger push force and proper positioning
+      const pushForce = 10; // Increased from 6
+      const pushX = (pushDirection.x / pushMagnitude) * pushForce;
+      const pushZ = (pushDirection.z / pushMagnitude) * pushForce;
+
+      // Push player to safe distance
+      const safeDistance = playerRadius + 3;
+      const normalizedX = pushDirection.x / pushMagnitude;
+      const normalizedZ = pushDirection.z / pushMagnitude;
+
+      this.playerRef.position.x = carPos.x + normalizedX * safeDistance;
+      this.playerRef.position.z = carPos.z + normalizedZ * safeDistance;
+
+      this.playerRef.velocity.x = pushX;
+      this.playerRef.velocity.z = pushZ;
     }
   }
 
@@ -414,8 +443,6 @@ export class CollisionSystem {
   _handlePlayerCityObstacleCollision(obstacle) {
     const playerPos = this.playerRef.getPosition();
 
-    // Minor damage from hitting city obstacles
-    this.playerRef.takeDamage(PLAYER_CONFIG.COLLISION_DAMAGE / 4);
     this.collisionCooldown = this.cooldownDuration;
 
     if (this.effectsSystem) {

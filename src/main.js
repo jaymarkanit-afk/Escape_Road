@@ -269,7 +269,6 @@ class Game {
   _updateHUD() {
     this.hud.update({
       score: this.scoreSystem.getTotalScore(),
-      health: this.player.getHealthPercent(),
       boostReady: this.player.canBoost(),
       wantedLevel: this.wantedSystem.getWantedLevel(), // Pass wanted level to HUD
     });

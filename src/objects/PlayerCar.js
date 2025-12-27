@@ -27,6 +27,9 @@ export class PlayerCar {
     this.wheels = [];
     this.isFalling = false;
     this.fallSpeed = 0;
+    // Caught by police state
+    this.isCaught = false;
+    this.caughtTimer = 0;
     this._createMesh();
   }
 
@@ -97,6 +100,18 @@ export class PlayerCar {
   update(deltaTime) {
     if (!this.isAlive) return;
 
+    // Handle caught state countdown
+    if (this.isCaught) {
+      this.caughtTimer -= deltaTime;
+      if (this.caughtTimer <= 0) {
+        // Finally caught after 3 seconds
+        this.die();
+      }
+      // Disable input while being caught
+      this._updateMesh();
+      return;
+    }
+
     // Handle falling animation
     if (this.isFalling) {
       this.updateFalling(deltaTime);
@@ -139,8 +154,20 @@ export class PlayerCar {
   }
 
   _updatePosition(deltaTime) {
+    // Apply friction/damping to prevent cars from sliding infinitely
+    // This allows controlled deceleration when not moving
+    const frictionFactor = 0.92; // 92% of velocity retained per frame
+
     this.position.x += this.velocity.x * deltaTime;
     this.position.z += this.velocity.z * deltaTime;
+
+    // Apply damping to velocity (gradually reduce velocity over time)
+    this.velocity.x *= frictionFactor;
+    this.velocity.z *= frictionFactor;
+
+    // Stop very small velocities to prevent endless sliding
+    if (Math.abs(this.velocity.x) < 0.01) this.velocity.x = 0;
+    if (Math.abs(this.velocity.z) < 0.01) this.velocity.z = 0;
   }
 
   _animateWheels(deltaTime) {
@@ -198,6 +225,13 @@ export class PlayerCar {
   die() {
     this.isAlive = false;
     this.speed = 0;
+  }
+
+  setCaught() {
+    if (!this.isCaught) {
+      this.isCaught = true;
+      this.caughtTimer = 3.0; // 3 second countdown
+    }
   }
 
   startFalling() {

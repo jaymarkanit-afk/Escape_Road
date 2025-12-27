@@ -16,6 +16,12 @@ export class TrafficCar {
     this.rotation = 0;
     this.mesh = null;
     this.isActive = true;
+    // Collision and reverse state
+    this.isColliding = false;
+    this.collisionReverseTimer = 0;
+    this.collisionReverseDirection = { x: 0, z: 0 };
+    this.originalSpeed = this.speed;
+    this.originalDirection = { x: 0, z: 0 };
 
     this._setLaneDirection();
     this._createMesh();
@@ -44,6 +50,7 @@ export class TrafficCar {
         this.direction = { x: 1, z: 0 };
         break;
     }
+    this.originalDirection = { ...this.direction };
   }
 
   /**
@@ -123,12 +130,35 @@ export class TrafficCar {
   /**
    * Update traffic car movement
    */
-  update(deltaTime) {
+  update(deltaTime, cityRef = null) {
     if (!this.isActive) return;
+
+    // Handle collision reverse behavior
+    if (this.isColliding && this.collisionReverseTimer > 0) {
+      // Apply reverse movement
+      this.direction.x = this.collisionReverseDirection.x;
+      this.direction.z = this.collisionReverseDirection.z;
+      this.speed = 6; // Reverse speed
+
+      // Decrement timer
+      this.collisionReverseTimer -= deltaTime;
+
+      // Clear collision state when timer expires
+      if (this.collisionReverseTimer <= 0) {
+        this.isColliding = false;
+        this.direction = { ...this.originalDirection };
+        this.speed = this.originalSpeed;
+      }
+    }
 
     // Move in lane direction
     this.position.x += this.direction.x * this.speed * deltaTime;
     this.position.z += this.direction.z * this.speed * deltaTime;
+
+    // Check for building collisions and avoid them
+    if (cityRef) {
+      this._checkBuildingCollision(cityRef);
+    }
 
     // Update mesh position
     if (this.mesh) {
@@ -141,6 +171,75 @@ export class TrafficCar {
     );
     if (distanceFromOrigin > 150) {
       this.isActive = false;
+    }
+  }
+
+  /**
+   * Check and handle collision with buildings
+   * @private
+   */
+  _checkBuildingCollision(cityRef) {
+    const carBox = this.getBoundingBox();
+    const buildings = cityRef.getBuildings();
+
+    for (const building of buildings) {
+      const halfWidth = building.geometry.parameters.width / 2 + 1;
+      const halfDepth = building.geometry.parameters.depth / 2 + 1;
+
+      const buildingBox = {
+        min: {
+          x: building.position.x - halfWidth,
+          y: 0,
+          z: building.position.z - halfDepth,
+        },
+        max: {
+          x: building.position.x + halfWidth,
+          y: building.geometry.parameters.height,
+          z: building.position.z + halfDepth,
+        },
+      };
+
+      // Check AABB collision
+      if (
+        carBox.min.x < buildingBox.max.x &&
+        carBox.max.x > buildingBox.min.x &&
+        carBox.min.z < buildingBox.max.z &&
+        carBox.max.z > buildingBox.min.z
+      ) {
+        // Collision detected - push car out
+        const carCenter = {
+          x: this.position.x,
+          z: this.position.z,
+        };
+        const buildingCenter = {
+          x: (buildingBox.min.x + buildingBox.max.x) / 2,
+          z: (buildingBox.min.z + buildingBox.max.z) / 2,
+        };
+
+        // Calculate push direction
+        const dx = carCenter.x - buildingCenter.x;
+        const dz = carCenter.z - buildingCenter.z;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+
+        if (distance > 0) {
+          // Normalize push direction
+          const normalizedDx = dx / distance;
+          const normalizedDz = dz / distance;
+
+          // Push car away from building
+          const pushDistance = 2;
+          this.position.x = buildingCenter.x + normalizedDx * pushDistance;
+          this.position.z = buildingCenter.z + normalizedDz * pushDistance;
+
+          // Stop and reverse like player car
+          this.isColliding = true;
+          this.collisionReverseTimer = 0.2; // 200ms reverse
+          this.collisionReverseDirection = {
+            x: normalizedDx,
+            z: normalizedDz,
+          };
+        }
+      }
     }
   }
 
@@ -217,43 +316,7 @@ export class TrafficManager {
 
     // Update existing traffic cars and check building collisions
     this.trafficCars.forEach((car) => {
-      car.update(deltaTime);
-
-      // Check building collision
-      if (this.cityRef && this.cityRef.buildings) {
-        const carBox = car.getBoundingBox();
-        for (const building of this.cityRef.buildings) {
-          const buildingBox = {
-            min: {
-              x: building.position.x - building.geometry.parameters.width / 2,
-              y: 0,
-              z: building.position.z - building.geometry.parameters.depth / 2,
-            },
-            max: {
-              x: building.position.x + building.geometry.parameters.width / 2,
-              y: building.geometry.parameters.height,
-              z: building.position.z + building.geometry.parameters.depth / 2,
-            },
-          };
-
-          // Simple AABB collision check
-          if (
-            carBox.min.x < buildingBox.max.x &&
-            carBox.max.x > buildingBox.min.x &&
-            carBox.min.z < buildingBox.max.z &&
-            carBox.max.z > buildingBox.min.z
-          ) {
-            // Hit building - reverse direction
-            car.direction.x *= -1;
-            car.direction.z *= -1;
-            car.rotation += Math.PI;
-            // Push car away
-            car.position.x -= car.direction.x * 5;
-            car.position.z -= car.direction.z * 5;
-            break;
-          }
-        }
-      }
+      car.update(deltaTime, this.cityRef);
     });
 
     // Remove inactive cars
