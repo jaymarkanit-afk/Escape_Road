@@ -292,9 +292,9 @@ export class City {
           const divider = new THREE.Mesh(laneGeo, laneMarkerMat);
           divider.rotation.x = -Math.PI / 2;
           if (isVertical) {
-            divider.position.set(cx, 0.03, centerZ + offset);
+            divider.position.set(centerX + cx, 0.03, centerZ + offset);
           } else {
-            divider.position.set(centerX + offset, 0.03, cx);
+            divider.position.set(centerX + offset, 0.03, centerZ + cx);
           }
           group.add(divider);
         }

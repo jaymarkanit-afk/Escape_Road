@@ -26,11 +26,20 @@ export class CameraController {
    */
   update(deltaTime) {
     const playerPos = this.playerRef.getPosition();
+    const playerSpeed = this.playerRef.getSpeed();
+
+    // Adjust camera offset based on movement direction
+    let cameraOffset = { ...this.offset };
+
+    // If player is moving backward (negative speed), flip camera offset
+    if (playerSpeed < 0) {
+      cameraOffset.z = -this.offset.z; // Move camera to front when reversing
+    }
 
     // Calculate target camera position (isometric - behind and above)
-    this.targetPosition.x = playerPos.x + this.offset.x;
-    this.targetPosition.y = this.offset.y;
-    this.targetPosition.z = playerPos.z + this.offset.z;
+    this.targetPosition.x = playerPos.x + cameraOffset.x;
+    this.targetPosition.y = cameraOffset.y;
+    this.targetPosition.z = playerPos.z + cameraOffset.z;
 
     // Smoothly interpolate camera position
     this.camera.position.x = lerp(

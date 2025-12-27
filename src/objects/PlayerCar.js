@@ -9,7 +9,8 @@ export class PlayerCar {
     this.position = { x: 0, y: 0, z: 0 };
     this.velocity = { x: 0, z: 0 };
     this.rotation = Math.PI; // Start facing forward (negative Z direction) - Math.PI = 180 degrees
-    this.speed = PLAYER_CONFIG.AUTO_FORWARD_SPEED; // Initialize with forward speed
+    this.speed = 0; // Current speed (starts at 0, accelerates over time)
+    this.targetSpeed = 0; // Target speed to accelerate towards
     this.health = PLAYER_CONFIG.MAX_HEALTH;
     this.isAlive = true;
     this.boostActive = false;
@@ -133,13 +134,36 @@ export class PlayerCar {
   _applyInput(deltaTime) {
     const config = PLAYER_CONFIG;
 
-    // Auto-forward movement (constant running)
-    this.speed = config.AUTO_FORWARD_SPEED;
+    // Determine target speed based on input
+    if (this.input.backward) {
+      // Reverse movement (S key)
+      this.targetSpeed = -config.AUTO_FORWARD_SPEED * 0.6; // 60% of forward speed for reverse
+    } else {
+      // Auto-forward movement
+      this.targetSpeed = config.AUTO_FORWARD_SPEED;
 
-    // Boost increases speed
-    if (this.boostActive) {
-      this.speed = config.AUTO_FORWARD_SPEED * config.BOOST_MULTIPLIER;
+      // Boost increases target speed (only when not reversing)
+      if (this.boostActive) {
+        this.targetSpeed = config.MAX_SPEED * config.BOOST_MULTIPLIER;
+      }
     }
+
+    // Accelerate towards target speed
+    const acceleration = config.ACCELERATION * 60 * deltaTime; // Scale by deltaTime
+    if (this.speed < this.targetSpeed) {
+      // Accelerating forward or reducing reverse
+      this.speed = Math.min(this.speed + acceleration, this.targetSpeed);
+    } else if (this.speed > this.targetSpeed) {
+      // Decelerating or accelerating in reverse
+      this.speed = Math.max(this.speed - acceleration, this.targetSpeed);
+    }
+
+    // Clamp speed to max limits
+    const maxForwardSpeed = this.boostActive
+      ? config.MAX_SPEED * config.BOOST_MULTIPLIER
+      : config.MAX_SPEED;
+    const maxReverseSpeed = -config.AUTO_FORWARD_SPEED * 0.6;
+    this.speed = clamp(this.speed, maxReverseSpeed, maxForwardSpeed);
 
     // Left/Right steering only
     if (this.input.left)
