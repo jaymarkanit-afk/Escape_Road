@@ -107,6 +107,11 @@ class Game {
     // Clear any existing game objects
     this._cleanupGameObjects();
 
+    // Reset input so pause/boost keys aren't stuck between runs
+    if (this.inputManager) {
+      this.inputManager.reset();
+    }
+
     // Get scene reference
     const scene = this.engine.getScene();
 
@@ -175,7 +180,7 @@ class Game {
     });
 
     this.collisionSystem.setOnPlayerHitEnemy(() => {
-      console.log("🚔 Caught by police!");
+      this._handlePlayerCaught();
     });
 
     this.collisionSystem.setOnNearMiss(() => {
@@ -201,6 +206,20 @@ class Game {
     this.hud.show();
 
     console.log("✅ Game started");
+  }
+
+  /**
+   * Handle player being caught by police
+   * Triggers immediate game over instead of hanging in caught state
+   * @private
+   */
+  _handlePlayerCaught() {
+    // Guard against duplicate triggers
+    if (!this.isPlaying) return;
+
+    // Stop player and end the run immediately
+    this.player.die();
+    this.gameOver();
   }
 
   /**
@@ -304,6 +323,9 @@ class Game {
   gameOver() {
     console.log("☠️ Game Over");
 
+    // Prevent re-entering game over if already handled
+    if (!this.isPlaying) return;
+
     this.isPlaying = false;
     this.gameLoop.stop();
 
@@ -320,6 +342,8 @@ class Game {
    */
   restartGame() {
     console.log("🔄 Restarting game...");
+    // Ensure any overlay is hidden before restarting
+    this.menuSystem.hideGameOverMenu();
     this.startGame();
   }
 
