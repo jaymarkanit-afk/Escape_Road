@@ -967,11 +967,18 @@ export class City {
       tile.roads.forEach((road) => {
         this.scene.remove(road);
         // Some roads are Groups (lane marker collections)
-        if (road.isMesh && road.geometry && typeof road.geometry.dispose === "function") {
+        if (
+          road.isMesh &&
+          road.geometry &&
+          typeof road.geometry.dispose === "function"
+        ) {
           road.geometry.dispose();
         } else if (road.traverse) {
           road.traverse((child) => {
-            if (child.geometry && typeof child.geometry.dispose === "function") {
+            if (
+              child.geometry &&
+              typeof child.geometry.dispose === "function"
+            ) {
               child.geometry.dispose();
             }
             if (child.material) {
@@ -992,7 +999,10 @@ export class City {
         // Hazards may be meshes; guard accordingly
         if (hazard.mesh && hazard.mesh.traverse) {
           hazard.mesh.traverse((child) => {
-            if (child.geometry && typeof child.geometry.dispose === "function") {
+            if (
+              child.geometry &&
+              typeof child.geometry.dispose === "function"
+            ) {
               child.geometry.dispose();
             }
             if (child.material) {

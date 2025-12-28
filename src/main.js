@@ -135,7 +135,13 @@ class Game {
         x: Math.random() * 60 - 30,
         z: 40 + Math.random() * 20,
       };
-      const enemy = new EnemyChaser(scene, this.player, spawnPos, this.city);
+      const enemy = new EnemyChaser(
+        scene,
+        this.player,
+        spawnPos,
+        this.city,
+        this.enemies
+      );
       this.enemies.push(enemy);
     }
 

@@ -9,10 +9,17 @@ import { ENEMY_CONFIG, COLORS } from "../utils/constants.js";
 import { lerp, clamp, distance2D } from "../utils/helpers.js";
 
 export class EnemyChaser {
-  constructor(scene, playerRef, spawnOffset = { x: 0, z: 30 }, cityRef = null) {
+  constructor(
+    scene,
+    playerRef,
+    spawnOffset = { x: 0, z: 30 },
+    cityRef = null,
+    enemiesRef = null
+  ) {
     this.scene = scene;
     this.playerRef = playerRef;
     this.cityRef = cityRef;
+    this.enemiesRef = enemiesRef; // Optional reference to all police for cooperation
 
     // Physics state (omnidirectional)
     this.position = { x: spawnOffset.x, y: 0, z: spawnOffset.z };
@@ -30,6 +37,14 @@ export class EnemyChaser {
     this.wheels = [];
     this.lights = [];
     this.lightBlinkTime = 0;
+    // Behavior state
+    this.pursuitOffset = {
+      // Give each police a unique lateral offset relative to player's heading
+      x: (Math.random() - 0.5) * 10,
+      z: (Math.random() - 0.5) * 4,
+    };
+    this.blockTimer = 0; // Active cutoff maneuver time
+    this.wanderPhase = Math.random() * Math.PI * 2;
     this._createMesh();
   }
 
@@ -155,6 +170,7 @@ export class EnemyChaser {
    * @param {number} deltaTime - Time since last frame in seconds
    */
   update(deltaTime) {
+    if (this.blockTimer > 0) this.blockTimer -= deltaTime;
     const playerPos = this.playerRef.getPosition();
 
     // Calculate distance to player
@@ -188,24 +204,104 @@ export class EnemyChaser {
   _updatePursuitAI(playerPos, deltaTime) {
     const config = ENEMY_CONFIG;
 
-    // Calculate angle to player
-    const dx = playerPos.x - this.position.x;
-    const dz = playerPos.z - this.position.z;
+    // Predict player's future position (simple pursuit)
+    const pvx = this.playerRef.velocity?.x ?? 0;
+    const pvz = this.playerRef.velocity?.z ?? 0;
+    const lookAhead = clamp(this.distanceToPlayer / 20, 0.2, 1.2);
+    const predicted = {
+      x: playerPos.x + pvx * lookAhead,
+      z: playerPos.z + pvz * lookAhead,
+    };
+
+    // Compute line-of-sight from this police to player (independent of player's rotation)
+    const losAngle = Math.atan2(
+      playerPos.x - this.position.x,
+      playerPos.z - this.position.z
+    );
+    const forwardLOS = { x: Math.sin(losAngle), z: Math.cos(losAngle) };
+    const lateralLOS = {
+      x: Math.sin(losAngle + Math.PI / 2),
+      z: Math.cos(losAngle + Math.PI / 2),
+    };
+
+    // Offset pursuit in LOS space (flanking independent of player's steering)
+    const offsetWorld = {
+      x:
+        lateralLOS.x * this.pursuitOffset.x +
+        forwardLOS.x * this.pursuitOffset.z,
+      z:
+        lateralLOS.z * this.pursuitOffset.x +
+        forwardLOS.z * this.pursuitOffset.z,
+    };
+
+    // Occasional cutoff maneuver: aim ahead of player's velocity for short bursts
+    let aheadBoost = 0;
+    if (
+      this.distanceToPlayer < 22 &&
+      this.blockTimer <= 0 &&
+      Math.random() < 0.15
+    ) {
+      this.blockTimer = 1.5; // seconds
+    }
+    if (this.blockTimer > 0) {
+      aheadBoost = 8; // meters ahead of predicted spot
+    }
+    // Use player's velocity direction, not rotation
+    const pvmag = Math.sqrt(pvx * pvx + pvz * pvz) || 1;
+    const playerVelDir = { x: pvx / pvmag, z: pvz / pvmag };
+
+    // Base target position
+    let target = {
+      x: predicted.x + offsetWorld.x + playerVelDir.x * aheadBoost,
+      z: predicted.z + offsetWorld.z + playerVelDir.z * aheadBoost,
+    };
+
+    // Separation: steer away from nearby police to avoid stacking
+    if (this.enemiesRef && Array.isArray(this.enemiesRef)) {
+      let sepX = 0,
+        sepZ = 0;
+      const sepRadius = 6;
+      for (const other of this.enemiesRef) {
+        if (other === this) continue;
+        const op = other.getPosition?.() ?? other.position;
+        const dxo = this.position.x - op.x;
+        const dzo = this.position.z - op.z;
+        const d2 = dxo * dxo + dzo * dzo;
+        if (d2 > 0 && d2 < sepRadius * sepRadius) {
+          const d = Math.sqrt(d2);
+          sepX += dxo / d;
+          sepZ += dzo / d;
+        }
+      }
+      const sepWeight = 2.0;
+      target.x += sepX * sepWeight;
+      target.z += sepZ * sepWeight;
+    }
+
+    // Small wander to keep behavior organic
+    this.wanderPhase += deltaTime * 0.7;
+    const wanderWeight = 1.2;
+    target.x += Math.sin(this.wanderPhase) * wanderWeight;
+    target.z += Math.cos(this.wanderPhase * 0.8) * wanderWeight;
+
+    // Compute desired angle towards target
+    const dx = target.x - this.position.x;
+    const dz = target.z - this.position.z;
     this.targetRotation = Math.atan2(dx, dz);
 
-    // Smoothly rotate towards player
+    // Smoothly rotate towards target
     let rotDiff = this.targetRotation - this.rotation;
-
-    // Normalize angle difference to -PI to PI
     while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
     while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
-
     this.rotation += rotDiff * config.ROTATION_SPEED;
 
-    // Dynamic speed based on distance to player
-    if (this.distanceToPlayer > config.MAX_DISTANCE) {
+    // Dynamic speed: be more aggressive when far or cutting off
+    if (
+      this.distanceToPlayer > config.MAX_DISTANCE - 5 ||
+      this.blockTimer > 0
+    ) {
       this.speed = Math.min(
-        this.speed + this.aggressionLevel,
+        this.speed + this.aggressionLevel * 1.5,
         config.CATCH_UP_SPEED
       );
     } else if (this.distanceToPlayer < config.MIN_DISTANCE) {
@@ -215,7 +311,7 @@ export class EnemyChaser {
       );
     } else {
       const playerSpeed = this.playerRef.getSpeed();
-      this.speed = lerp(this.speed, playerSpeed + 2, 0.02);
+      this.speed = lerp(this.speed, playerSpeed + 3, 0.03);
     }
 
     // Clamp speed
