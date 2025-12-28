@@ -11,7 +11,6 @@ import { EnemyChaser } from "./objects/EnemyChaser.js";
 import { City } from "./objects/City.js";
 import { Desert } from "./objects/Desert.js";
 import { TrafficManager } from "./objects/TrafficCar.js";
-import { ObstacleSpawner } from "./systems/ObstacleSpawner.js";
 import { CollisionSystem } from "./systems/CollisionSystem.js";
 import { ScoreSystem } from "./systems/ScoreSystem.js";
 import { DifficultyManager } from "./systems/DifficultyManager.js";
@@ -41,7 +40,6 @@ class Game {
     this.trafficManager = null;
 
     // Game systems
-    this.obstacleSpawner = null;
     this.collisionSystem = null;
     this.scoreSystem = null;
     this.difficultyManager = null;
@@ -102,27 +100,42 @@ class Game {
    * Start a new game
    */
   startGame() {
-    console.log("🚀 Starting game...");
+    console.log("🚀 === STARTING NEW GAME ===");
 
     // Clear any existing game objects
+    console.log("🧹 Cleanup phase...");
     this._cleanupGameObjects();
 
     // Reset input so pause/boost keys aren't stuck between runs
     if (this.inputManager) {
       this.inputManager.reset();
+      console.log("⌨️ Input manager reset");
     }
 
     // Get scene reference
     const scene = this.engine.getScene();
+    console.log(`🎬 Scene ready, children count: ${scene.children.length}`);
 
     // Create game objects
+    console.log("🚗 Creating player car...");
     this.player = new PlayerCar(scene);
+    console.log(
+      `✅ Player created at (${this.player.position.x}, ${this.player.position.z})`
+    );
+
+    console.log("🏙️ Creating city...");
     this.city = new City(scene);
+    console.log("✅ City created");
+
     // OPTIMIZED: Desert disabled for performance
     // this.desert = new Desert(scene);
+
+    console.log("🚕 Creating traffic manager...");
     this.trafficManager = new TrafficManager(scene, this.city); // Pass city reference for collision
+    console.log("✅ Traffic manager created");
 
     // Create multiple enemy police cars
+    console.log("🚓 Creating enemy police cars...");
     this.enemies = [];
     const enemySpawnPositions = [
       { x: -30, z: 40 },
@@ -143,26 +156,25 @@ class Game {
         this.enemies
       );
       this.enemies.push(enemy);
+      console.log(
+        `🚓 Enemy ${i + 1} created at (${spawnPos.x}, ${spawnPos.z})`
+      );
     }
 
     // Create game systems (updated for multiple enemies)
-    this.obstacleSpawner = new ObstacleSpawner(scene, this.city);
+    console.log("⚙️ Creating game systems...");
     this.effectsSystem = new EffectsSystem(scene);
     this.soundSystem = new SoundSystem();
     this.collisionSystem = new CollisionSystem(
       this.player,
       this.enemies,
-      this.obstacleSpawner,
       this.city,
       this.effectsSystem,
       this.soundSystem,
       this.trafficManager // Pass traffic manager for collision detection
     );
     this.scoreSystem = new ScoreSystem(this.player);
-    this.difficultyManager = new DifficultyManager(
-      this.enemies,
-      this.obstacleSpawner
-    );
+    this.difficultyManager = new DifficultyManager(this.enemies);
 
     // Create wanted system for dynamic police spawning
     this.wantedSystem = new WantedSystem(
@@ -172,26 +184,20 @@ class Game {
       WANTED_CONFIG,
       this.city // Pass city reference for building collision
     );
+    console.log("✅ All game systems created");
 
     // Setup camera controller
+    console.log("🎥 Setting up camera...");
     this.cameraController = new CameraController(
       this.engine.getCamera(),
       this.player
     );
     this.cameraController.reset();
+    console.log("✅ Camera ready");
 
     // Setup collision callbacks
-    this.collisionSystem.setOnPlayerHitObstacle(() => {
-      console.log("💥 Hit obstacle!");
-    });
-
     this.collisionSystem.setOnPlayerHitEnemy(() => {
       this._handlePlayerCaught();
-    });
-
-    this.collisionSystem.setOnNearMiss(() => {
-      this.scoreSystem.addNearMissBonus();
-      console.log("✨ Near miss bonus!");
     });
 
     // Setup difficulty increase callback
@@ -200,18 +206,22 @@ class Game {
     });
 
     // Register update callbacks with game loop
+    console.log("🔄 Registering game loop callbacks...");
     this.gameLoop.clearCallbacks();
     this.gameLoop.registerUpdate((deltaTime) => this._update(deltaTime));
     this.gameLoop.registerRender(() => this._render());
+    console.log("✅ Callbacks registered");
 
     // Start game loop
+    console.log("▶️ Starting game loop...");
     this.gameLoop.start();
     this.isPlaying = true;
 
     // Show HUD
     this.hud.show();
 
-    console.log("✅ Game started");
+    console.log("✅ === GAME STARTED SUCCESSFULLY ===");
+    console.log(`Scene objects: ${scene.children.length}`);
   }
 
   /**
@@ -260,7 +270,6 @@ class Game {
     }
 
     // Update systems
-    this.obstacleSpawner.update(deltaTime, this.player.getPosition().z);
     this.collisionSystem.update(deltaTime);
     this.scoreSystem.update(deltaTime);
     this.difficultyManager.update(deltaTime);
@@ -347,10 +356,59 @@ class Game {
    * Restart the game
    */
   restartGame() {
-    console.log("🔄 Restarting game...");
+    console.log("🔄 === RESTART GAME INITIATED ===");
+
+    // Stop the current game loop completely
+    if (this.gameLoop) {
+      console.log("⏸️ Stopping game loop");
+      this.gameLoop.stop();
+      // Clear all callbacks to prevent old references
+      this.gameLoop.clearCallbacks();
+    }
+
+    // Mark game as not playing
+    this.isPlaying = false;
+    console.log("🚫 isPlaying = false");
+
+    // Clean up all game objects properly
+    console.log("🧹 Cleaning up game objects");
+    this._cleanupGameObjects();
+
+    // Clear all systems that maintain state
+    if (this.collisionSystem) {
+      console.log("Clearing collision system");
+      this.collisionSystem = null;
+    }
+    if (this.scoreSystem) {
+      console.log("Clearing score system");
+      this.scoreSystem = null;
+    }
+    if (this.difficultyManager) {
+      console.log("Clearing difficulty manager");
+      this.difficultyManager = null;
+    }
+    if (this.effectsSystem) {
+      console.log("Clearing effects system");
+      this.effectsSystem = null;
+    }
+    if (this.wantedSystem) {
+      console.log("Clearing wanted system");
+      this.wantedSystem = null;
+    }
+    if (this.cameraController) {
+      console.log("Clearing camera controller");
+      this.cameraController = null;
+    }
+
     // Ensure any overlay is hidden before restarting
     this.menuSystem.hideGameOverMenu();
-    this.startGame();
+
+    // Small delay to ensure cleanup completes
+    console.log("⏳ Waiting 100ms for cleanup to complete...");
+    setTimeout(() => {
+      console.log("✅ Cleanup complete, starting new game");
+      this.startGame();
+    }, 100);
   }
 
   /**
@@ -358,18 +416,54 @@ class Game {
    * @private
    */
   _cleanupGameObjects() {
-    if (this.player) this.player.dispose();
-
-    // Cleanup all enemies
-    if (this.enemies) {
-      this.enemies.forEach((enemy) => enemy.dispose());
-      this.enemies = [];
+    try {
+      if (this.player) {
+        console.log("Disposing player...");
+        this.player.dispose();
+      }
+    } catch (error) {
+      console.error("Error disposing player:", error);
     }
 
-    if (this.city) this.city.dispose();
-    if (this.desert) this.desert.dispose();
-    if (this.trafficManager) this.trafficManager.dispose();
-    if (this.obstacleSpawner) this.obstacleSpawner.dispose();
+    // Cleanup all enemies
+    try {
+      if (this.enemies) {
+        console.log(`Disposing ${this.enemies.length} enemies...`);
+        this.enemies.forEach((enemy) => enemy.dispose());
+        this.enemies = [];
+      }
+    } catch (error) {
+      console.error("Error disposing enemies:", error);
+    }
+
+    try {
+      if (this.city) {
+        console.log("Disposing city...");
+        this.city.dispose();
+      }
+    } catch (error) {
+      console.error("Error disposing city:", error);
+    }
+
+    try {
+      if (this.desert) {
+        console.log("Disposing desert...");
+        this.desert.dispose();
+      }
+    } catch (error) {
+      console.error("Error disposing desert:", error);
+    }
+
+    try {
+      if (this.trafficManager) {
+        console.log("Disposing traffic manager...");
+        this.trafficManager.dispose();
+      }
+    } catch (error) {
+      console.error("Error disposing traffic manager:", error);
+    }
+
+    console.log("✅ All game objects cleaned up");
   }
 
   /**

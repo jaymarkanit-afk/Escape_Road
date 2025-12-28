@@ -13,15 +13,17 @@ export class City {
   constructor(scene) {
     this.scene = scene;
     this.buildings = [];
-    this.hazards = [];
-    this.tiles = [];
+    this.tiles = new Map(); // Use Map for efficient tile lookup by grid coordinates
     this.tileSize = WORLD_CONFIG.SIZE;
     this.cityObstacles = new CityObstacles(scene);
+    this.visibleRadius = 3; // Number of tiles to keep visible around player (3x3 = 9 tiles)
+    this.lastPlayerGrid = { x: 0, z: 0 }; // Track last player grid position
 
     // Shared materials (reused across all objects to reduce texture/material count)
     this._initSharedMaterials();
 
-    this._createTiles();
+    // Create initial 3x3 grid around spawn point (dynamic loading will handle the rest)
+    this._initializeInitialTiles();
     this._spawnUrbanObstacles();
     // Walls removed
   }
@@ -210,13 +212,111 @@ export class City {
     });
   }
 
-  _createTiles() {
-    // Build a 3x3 grid around origin to start, then recycle for endless effect
+  /**
+   * Initialize only the starting 3x3 tiles around origin
+   * @private
+   */
+  _initializeInitialTiles() {
+    // Start with minimal 3x3 grid (9 tiles) for quick load
     for (let gx = -1; gx <= 1; gx++) {
       for (let gz = -1; gz <= 1; gz++) {
-        this.tiles.push(this._createTile(gx, gz));
+        this._createAndAddTile(gx, gz);
       }
     }
+  }
+
+  /**
+   * Create a tile key from grid coordinates for Map lookup
+   * @private
+   */
+  _getTileKey(gridX, gridZ) {
+    return `${gridX},${gridZ}`;
+  }
+
+  /**
+   * Create and add a tile to the scene
+   * @private
+   */
+  _createAndAddTile(gridX, gridZ) {
+    const key = this._getTileKey(gridX, gridZ);
+
+    // Don't create if already exists
+    if (this.tiles.has(key)) {
+      return this.tiles.get(key);
+    }
+
+    const tile = this._createTile(gridX, gridZ);
+    this.tiles.set(key, tile);
+    return tile;
+  }
+
+  /**
+   * Remove and cleanup a tile
+   * @private
+   */
+  _removeTile(gridX, gridZ) {
+    const key = this._getTileKey(gridX, gridZ);
+    const tile = this.tiles.get(key);
+
+    if (!tile) return;
+
+    // Remove ground
+    if (tile.ground) {
+      this.scene.remove(tile.ground);
+      tile.ground.geometry.dispose();
+      tile.ground.material.dispose();
+    }
+
+    // Remove roads
+    tile.roads.forEach((road) => {
+      this.scene.remove(road);
+      if (road.isMesh && road.geometry) {
+        if (typeof road.geometry.dispose === "function") {
+          road.geometry.dispose();
+        }
+      } else if (road.traverse) {
+        road.traverse((child) => {
+          if (child.geometry && typeof child.geometry.dispose === "function") {
+            child.geometry.dispose();
+          }
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => m && m.dispose && m.dispose());
+            } else if (typeof child.material.dispose === "function") {
+              child.material.dispose();
+            }
+          }
+        });
+      }
+      if (road.material && typeof road.material.dispose === "function") {
+        road.material.dispose();
+      }
+    });
+
+    // Remove buildings (but keep in this.buildings array for collision)
+    tile.buildings.forEach((building) => {
+      this.scene.remove(building);
+      building.traverse((child) => {
+        if (child.geometry && typeof child.geometry.dispose === "function") {
+          child.geometry.dispose();
+        }
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m && m.dispose && m.dispose());
+          } else if (typeof child.material.dispose === "function") {
+            child.material.dispose();
+          }
+        }
+      });
+
+      // Remove from global buildings array
+      const idx = this.buildings.indexOf(building);
+      if (idx > -1) {
+        this.buildings.splice(idx, 1);
+      }
+    });
+
+    this.tiles.delete(key);
   }
 
   _createTile(gridX, gridZ) {
@@ -232,7 +332,6 @@ export class City {
       ground: null,
       roads: [],
       buildings: [],
-      hazards: [],
     };
 
     tile.ground = this._createGround(origin);
@@ -317,10 +416,13 @@ export class City {
     const vMedianGeo = new THREE.PlaneGeometry(medianWidth, 200);
     const vMedian = new THREE.Mesh(
       vMedianGeo,
-      new THREE.MeshLambertMaterial({ color: 0xc8ff80 })
+      new THREE.MeshLambertMaterial({
+        color: 0xc8ff80,
+        depthWrite: true,
+      })
     );
     vMedian.rotation.x = -Math.PI / 2;
-    vMedian.position.set(origin.x, 0.021, origin.z);
+    vMedian.position.set(origin.x, 0.025, origin.z); // Higher y-position to prevent z-fighting
     vMedian.receiveShadow = false;
     this.scene.add(vMedian);
     roads.push(vMedian);
@@ -341,10 +443,13 @@ export class City {
     const hMedianGeo = new THREE.PlaneGeometry(200, medianWidth);
     const hMedian = new THREE.Mesh(
       hMedianGeo,
-      new THREE.MeshLambertMaterial({ color: 0xc8ff80 })
+      new THREE.MeshLambertMaterial({
+        color: 0xc8ff80,
+        depthWrite: true,
+      })
     );
     hMedian.rotation.x = -Math.PI / 2;
-    hMedian.position.set(origin.x, 0.021, origin.z);
+    hMedian.position.set(origin.x, 0.026, origin.z); // Slightly higher to prevent overlap at intersections
     hMedian.receiveShadow = false;
     this.scene.add(hMedian);
     roads.push(hMedian);
@@ -444,58 +549,6 @@ export class City {
     });
 
     return buildings;
-  }
-
-  _createRivers(origin) {
-    const rivers = [];
-
-    // Small decorative rivers in far corners only
-    const riverPositions = [
-      // Top-left corner - small horizontal river
-      { x: -70, z: -70, width: 25, length: 6, rotation: 0 },
-      // Bottom-right corner - small vertical river
-      { x: 70, z: 70, width: 6, length: 25, rotation: Math.PI / 2 },
-    ];
-
-    riverPositions.forEach((riverPos) => {
-      const riverGeom = new THREE.PlaneGeometry(
-        riverPos.width,
-        riverPos.length
-      );
-      const river = new THREE.Mesh(riverGeom, this.riverMaterial);
-      river.rotation.x = -Math.PI / 2;
-      river.rotation.z = riverPos.rotation;
-      river.position.set(origin.x + riverPos.x, -0.15, origin.z + riverPos.z);
-      river.receiveShadow = false;
-      river.castShadow = false;
-      this.scene.add(river);
-
-      // Calculate hazard bounds based on rotation
-      let minX, maxX, minZ, maxZ;
-      if (riverPos.rotation === 0) {
-        // Horizontal river
-        minX = origin.x + riverPos.x - riverPos.width / 2;
-        maxX = origin.x + riverPos.x + riverPos.width / 2;
-        minZ = origin.z + riverPos.z - riverPos.length / 2;
-        maxZ = origin.z + riverPos.z + riverPos.length / 2;
-      } else {
-        // Vertical river (rotated)
-        minX = origin.x + riverPos.x - riverPos.length / 2;
-        maxX = origin.x + riverPos.x + riverPos.length / 2;
-        minZ = origin.z + riverPos.z - riverPos.width / 2;
-        maxZ = origin.z + riverPos.z + riverPos.width / 2;
-      }
-
-      const hazard = {
-        mesh: river,
-        min: { x: minX, z: minZ },
-        max: { x: maxX, z: maxZ },
-      };
-      rivers.push(hazard);
-      this.hazards.push(hazard);
-    });
-
-    return rivers;
   }
 
   /**
@@ -869,77 +922,64 @@ export class City {
     return false;
   }
 
-  isHazard(x, z) {
-    return this.hazards.some((hazard) => {
-      return (
-        x >= hazard.min.x &&
-        x <= hazard.max.x &&
-        z >= hazard.min.z &&
-        z <= hazard.max.z
-      );
-    });
-  }
-
   update(playerPosition) {
     const currentGridX = Math.round(playerPosition.x / this.tileSize);
     const currentGridZ = Math.round(playerPosition.z / this.tileSize);
 
-    this.tiles.forEach((tile) => {
-      const dx = tile.gridX - currentGridX;
-      const dz = tile.gridZ - currentGridZ;
+    // Only update tiles if player has moved to a new grid cell
+    if (
+      currentGridX === this.lastPlayerGrid.x &&
+      currentGridZ === this.lastPlayerGrid.z
+    ) {
+      return; // No tile updates needed
+    }
 
-      if (Math.abs(dx) > 1 || Math.abs(dz) > 1) {
-        const newGridX = currentGridX + (dx > 0 ? -1 : 1);
-        const newGridZ = currentGridZ + (dz > 0 ? -1 : 1);
-        this._repositionTile(tile, newGridX, newGridZ);
+    this.lastPlayerGrid.x = currentGridX;
+    this.lastPlayerGrid.z = currentGridZ;
+
+    // Determine which tiles should be visible
+    const tilesToKeep = new Set();
+    for (let dx = -this.visibleRadius; dx <= this.visibleRadius; dx++) {
+      for (let dz = -this.visibleRadius; dz <= this.visibleRadius; dz++) {
+        const gridX = currentGridX + dx;
+        const gridZ = currentGridZ + dz;
+        const key = this._getTileKey(gridX, gridZ);
+        tilesToKeep.add(key);
+
+        // Create tile if it doesn't exist yet
+        if (!this.tiles.has(key)) {
+          this._createAndAddTile(gridX, gridZ);
+        }
       }
+    }
+
+    // Remove tiles that are too far away
+    const tilesToRemove = [];
+    for (const [key, tile] of this.tiles.entries()) {
+      if (!tilesToKeep.has(key)) {
+        tilesToRemove.push({ gridX: tile.gridX, gridZ: tile.gridZ });
+      }
+    }
+
+    // Clean up distant tiles to free memory
+    tilesToRemove.forEach(({ gridX, gridZ }) => {
+      this._removeTile(gridX, gridZ);
     });
-  }
-
-  _repositionTile(tile, newGridX, newGridZ) {
-    const newOrigin = {
-      x: newGridX * this.tileSize,
-      z: newGridZ * this.tileSize,
-    };
-
-    const deltaX = newOrigin.x - tile.origin.x;
-    const deltaZ = newOrigin.z - tile.origin.z;
-
-    // Move ground
-    tile.ground.position.x += deltaX;
-    tile.ground.position.z += deltaZ;
-
-    // Move roads
-    tile.roads.forEach((road) => {
-      road.position.x += deltaX;
-      road.position.z += deltaZ;
-    });
-
-    // Move buildings
-    tile.buildings.forEach((building) => {
-      building.position.x += deltaX;
-      building.position.z += deltaZ;
-    });
-
-    // Move hazards and bounding boxes
-    tile.hazards.forEach((hazard) => {
-      hazard.mesh.position.x += deltaX;
-      hazard.mesh.position.z += deltaZ;
-      hazard.min.x += deltaX;
-      hazard.max.x += deltaX;
-      hazard.min.z += deltaZ;
-      hazard.max.z += deltaZ;
-    });
-
-    tile.gridX = newGridX;
-    tile.gridZ = newGridZ;
-    tile.origin = newOrigin;
   }
 
   /**
    * Cleanup resources
    */
   dispose() {
+    // Remove all tiles
+    const tileKeys = Array.from(this.tiles.keys());
+    tileKeys.forEach((key) => {
+      const tile = this.tiles.get(key);
+      if (tile) {
+        this._removeTile(tile.gridX, tile.gridZ);
+      }
+    });
+
     this.buildings.forEach((building) => {
       this.scene.remove(building);
       // Traverse all descendants; guard against non-THREE placeholder geometry
@@ -958,68 +998,12 @@ export class City {
       });
     });
 
-    this.tiles.forEach((tile) => {
-      if (tile.ground) {
-        this.scene.remove(tile.ground);
-        tile.ground.geometry.dispose();
-        tile.ground.material.dispose();
-      }
-      tile.roads.forEach((road) => {
-        this.scene.remove(road);
-        // Some roads are Groups (lane marker collections)
-        if (
-          road.isMesh &&
-          road.geometry &&
-          typeof road.geometry.dispose === "function"
-        ) {
-          road.geometry.dispose();
-        } else if (road.traverse) {
-          road.traverse((child) => {
-            if (
-              child.geometry &&
-              typeof child.geometry.dispose === "function"
-            ) {
-              child.geometry.dispose();
-            }
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m && m.dispose && m.dispose());
-              } else if (typeof child.material.dispose === "function") {
-                child.material.dispose();
-              }
-            }
-          });
-        }
-        if (road.material && typeof road.material.dispose === "function") {
-          road.material.dispose();
-        }
-      });
-      tile.hazards.forEach((hazard) => {
-        this.scene.remove(hazard.mesh);
-        // Hazards may be meshes; guard accordingly
-        if (hazard.mesh && hazard.mesh.traverse) {
-          hazard.mesh.traverse((child) => {
-            if (
-              child.geometry &&
-              typeof child.geometry.dispose === "function"
-            ) {
-              child.geometry.dispose();
-            }
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m) => m && m.dispose && m.dispose());
-              } else if (typeof child.material.dispose === "function") {
-                child.material.dispose();
-              }
-            }
-          });
-        }
-      });
-    });
-
     // Cleanup city obstacles
     if (this.cityObstacles) {
       this.cityObstacles.dispose();
     }
+
+    // Clear the tiles Map
+    this.tiles.clear();
   }
 }

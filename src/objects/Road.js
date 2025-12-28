@@ -67,7 +67,7 @@ export class Road {
     const config = ROAD_CONFIG;
     const segment = new THREE.Group();
 
-    // Main road surface
+    // Main road surface - positioned slightly above ground to prevent z-fighting
     const roadGeometry = new THREE.PlaneGeometry(
       config.SEGMENT_WIDTH,
       config.SEGMENT_LENGTH
@@ -78,6 +78,7 @@ export class Road {
 
     const roadMesh = new THREE.Mesh(roadGeometry, roadMaterial);
     roadMesh.rotation.x = -Math.PI / 2;
+    roadMesh.position.y = 0.02; // Raised to prevent z-fighting
     roadMesh.receiveShadow = true;
     segment.add(roadMesh);
 
@@ -112,7 +113,7 @@ export class Road {
         marker.rotation.x = -Math.PI / 2;
         marker.position.set(
           laneX,
-          0.01,
+          0.03, // Above road surface
           -i * markerSpacing - markerSpacing / 2
         );
         segment.add(marker);
@@ -135,7 +136,7 @@ export class Road {
       centerStrip.rotation.x = -Math.PI / 2;
       centerStrip.position.set(
         0,
-        0.015,
+        0.04, // Above lane markers
         -i * centerSpacing - centerSpacing / 2
       );
       segment.add(centerStrip);

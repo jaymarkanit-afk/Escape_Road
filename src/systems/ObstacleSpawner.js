@@ -25,12 +25,10 @@ export class ObstacleSpawner {
     this.spawnRate = OBSTACLE_CONFIG.INITIAL_SPAWN_RATE;
     this.timeSinceLastSpawn = 0;
 
-    // Object pool for each obstacle type
+    // Object pool for each obstacle type (removed barrels and cones)
     this.pools = {
       static: new ObjectPool(() => new Obstacle(scene, "static"), 5),
       moving: new ObjectPool(() => new Obstacle(scene, "moving"), 3),
-      barrel: new ObjectPool(() => new Obstacle(scene, "barrel"), 5),
-      cone: new ObjectPool(() => new Obstacle(scene, "cone"), 5),
     };
   }
 
@@ -40,24 +38,22 @@ export class ObstacleSpawner {
    * @param {number} playerZ - Player's Z position
    */
   update(deltaTime, playerZ) {
-    this.timeSinceLastSpawn += deltaTime * 1000; // Convert to ms
-
-    // Spawn new obstacle if interval reached
-    if (this.timeSinceLastSpawn >= this.spawnRate) {
-      this._spawnObstacle(playerZ);
-      this.timeSinceLastSpawn = 0;
-    }
-
-    // Update all active obstacles
-    for (let i = this.obstacles.length - 1; i >= 0; i--) {
-      const obstacle = this.obstacles[i];
-      obstacle.update(deltaTime, playerZ);
-
-      // Remove obstacles that are behind player
-      if (obstacle.shouldRemove()) {
-        this._removeObstacle(i);
-      }
-    }
+    // DISABLED: Obstacle spawning removed as obstacles are not relevant to gameplay
+    // this.timeSinceLastSpawn += deltaTime * 1000; // Convert to ms
+    // // Spawn new obstacle if interval reached
+    // if (this.timeSinceLastSpawn >= this.spawnRate) {
+    //   this._spawnObstacle(playerZ);
+    //   this.timeSinceLastSpawn = 0;
+    // }
+    // // Update all active obstacles
+    // for (let i = this.obstacles.length - 1; i >= 0; i--) {
+    //   const obstacle = this.obstacles[i];
+    //   obstacle.update(deltaTime, playerZ);
+    //   // Remove obstacles that are behind player
+    //   if (obstacle.shouldRemove()) {
+    //     this._removeObstacle(i);
+    //   }
+    // }
   }
 
   /**
@@ -65,11 +61,9 @@ export class ObstacleSpawner {
    * @private
    */
   _spawnObstacle(playerZ) {
-    // Determine obstacle type
+    // Determine obstacle type (removed barrels and cones)
     const isMoving = Math.random() < OBSTACLE_CONFIG.MOVING_OBSTACLE_CHANCE;
-    const obstacleType = isMoving
-      ? "moving"
-      : randomChoice(["static", "barrel", "cone"]);
+    const obstacleType = isMoving ? "moving" : "static";
 
     // Get obstacle from pool
     const obstacle = this.pools[obstacleType].acquire();

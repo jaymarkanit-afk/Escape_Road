@@ -18,10 +18,6 @@ export class ScoreSystem {
     // Time tracking
     this.survivalTime = 0; // seconds
 
-    // Statistics
-    this.nearMissCount = 0;
-    this.obstaclesAvoided = 0;
-
     // Last recorded distance (to calculate delta)
     this.lastDistance = 0;
   }
@@ -44,21 +40,6 @@ export class ScoreSystem {
       distanceDelta * SCORING_CONFIG.DISTANCE_MULTIPLIER
     );
     this.lastDistance = currentDistance;
-  }
-
-  /**
-   * Add near miss bonus
-   */
-  addNearMissBonus() {
-    this.bonusScore += SCORING_CONFIG.NEAR_MISS_BONUS;
-    this.nearMissCount++;
-  }
-
-  /**
-   * Add obstacle avoided bonus (called when obstacle goes off-screen)
-   */
-  addObstacleAvoided() {
-    this.obstaclesAvoided++;
   }
 
   /**
@@ -104,8 +85,6 @@ export class ScoreSystem {
       totalScore: this.getTotalScore(),
       survivalTime: this.survivalTime,
       distance: this.playerRef.distanceTraveled,
-      nearMisses: this.nearMissCount,
-      obstaclesAvoided: this.obstaclesAvoided,
     };
   }
 
@@ -117,8 +96,6 @@ export class ScoreSystem {
     this.survivalScore = 0;
     this.bonusScore = 0;
     this.survivalTime = 0;
-    this.nearMissCount = 0;
-    this.obstaclesAvoided = 0;
     this.lastDistance = 0;
   }
 }

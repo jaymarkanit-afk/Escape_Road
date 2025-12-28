@@ -11,7 +11,6 @@ export class CollisionSystem {
   constructor(
     playerRef,
     enemiesRef,
-    obstacleSpawnerRef,
     cityRef = null,
     effectsSystem = null,
     soundSystem = null,
@@ -19,7 +18,6 @@ export class CollisionSystem {
   ) {
     this.playerRef = playerRef;
     this.enemiesRef = enemiesRef; // Array of enemies
-    this.obstacleSpawnerRef = obstacleSpawnerRef;
     this.cityRef = cityRef;
     this.effectsSystem = effectsSystem;
     this.soundSystem = soundSystem;
@@ -30,9 +28,7 @@ export class CollisionSystem {
     this.cooldownDuration = 300; // ms
 
     // Callbacks for collision events
-    this.onPlayerHitObstacle = null;
     this.onPlayerHitEnemy = null;
-    this.onNearMiss = null;
   }
 
   /**
@@ -44,9 +40,6 @@ export class CollisionSystem {
     if (this.collisionCooldown > 0) {
       this.collisionCooldown -= deltaTime * 1000;
     }
-
-    // Check player vs obstacles
-    this._checkPlayerObstacleCollisions();
 
     // Check player vs enemy
     this._checkPlayerEnemyCollision();
@@ -60,11 +53,7 @@ export class CollisionSystem {
     if (this.cityRef) {
       this._checkPlayerBuildingCollisions();
       this._checkPlayerCityObstacleCollisions();
-      this._checkHazards();
     }
-
-    // Check near misses for bonus points
-    this._checkNearMisses();
   }
 
   /**
@@ -375,13 +364,6 @@ export class CollisionSystem {
     }
   }
 
-  _checkHazards() {
-    const playerPos = this.playerRef.getPosition();
-    if (this.cityRef.isHazard(playerPos.x, playerPos.z)) {
-      this._handleFallHazard(playerPos);
-    }
-  }
-
   /**
    * Check collisions between player and traffic cars
    * @private
@@ -498,22 +480,6 @@ export class CollisionSystem {
     if (pushMagnitude > 0) {
       this.playerRef.velocity.x += (pushDirection.x / pushMagnitude) * 4;
       this.playerRef.velocity.z += (pushDirection.z / pushMagnitude) * 4;
-    }
-  }
-
-  _handleFallHazard(playerPos) {
-    if (!this.playerRef.isAlive || this.playerRef.isFalling) return;
-
-    // Trigger falling animation instead of instant death
-    this.playerRef.startFalling();
-    this.collisionCooldown = this.cooldownDuration;
-
-    if (this.effectsSystem) {
-      this.effectsSystem.createSplash?.(playerPos);
-    }
-
-    if (this.soundSystem) {
-      this.soundSystem.playCollisionSound(0.8);
     }
   }
 

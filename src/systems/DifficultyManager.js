@@ -7,9 +7,8 @@
 import { DIFFICULTY_CONFIG } from "../utils/constants.js";
 
 export class DifficultyManager {
-  constructor(enemiesRef, obstacleSpawnerRef) {
+  constructor(enemiesRef) {
     this.enemiesRef = enemiesRef; // Array of enemies
-    this.obstacleSpawnerRef = obstacleSpawnerRef;
 
     // Current difficulty state
     this.currentLevel = 1;
@@ -50,9 +49,6 @@ export class DifficultyManager {
     this.enemiesRef.forEach((enemy) => {
       enemy.scaleDifficulty(this.difficultyMultiplier);
     });
-
-    // Apply difficulty to obstacle spawner
-    this.obstacleSpawnerRef.scaleDifficulty(this.currentLevel);
 
     // Trigger callback if set
     if (this.onDifficultyIncrease) {

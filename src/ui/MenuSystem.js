@@ -170,8 +170,14 @@ export class MenuSystem {
     this.gameOverMenu.appendChild(this.gameOverStats);
 
     const restartButton = this._createButton("PLAY AGAIN", () => {
+      console.log("🎮 PLAY AGAIN button clicked");
       this.hideGameOverMenu();
-      if (this.onRestartGame) this.onRestartGame();
+      if (this.onRestartGame) {
+        console.log("📞 Calling onRestartGame callback");
+        this.onRestartGame();
+      } else {
+        console.error("❌ onRestartGame callback not set!");
+      }
     });
     this.gameOverMenu.appendChild(restartButton);
 
@@ -273,9 +279,7 @@ export class MenuSystem {
     this.gameOverStats.innerHTML = `
       <strong>FINAL SCORE: ${stats.totalScore.toLocaleString()}</strong><br><br>
       Survival Time: ${this._formatTime(stats.survivalTime)}<br>
-      Distance: ${Math.floor(stats.distance)} units<br>
-      Near Misses: ${stats.nearMisses}<br>
-      Obstacles Avoided: ${stats.obstaclesAvoided}
+      Distance: ${Math.floor(stats.distance)} units
     `;
 
     this.gameOverMenu.style.display = "flex";

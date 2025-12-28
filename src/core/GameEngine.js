@@ -35,8 +35,8 @@ export class GameEngine {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = false; // DISABLED for performance
 
-    // Clear bright sky without fog
-    this.scene.background = new THREE.Color(0xb8e0ff); // Bright clear blue sky
+    // Clear bright sky - city tiles now provide complete ground coverage
+    this.scene.background = new THREE.Color(0x87ceeb); // Natural sky blue
     // No fog for clear visibility
   }
 
@@ -76,7 +76,7 @@ export class GameEngine {
     this.scene.add(directionalLight);
 
     // Hemisphere light for natural sky/ground lighting
-    const hemisphereLight = new THREE.HemisphereLight(0xb8e0ff, 0x88cc88, 0.4);
+    const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x88cc88, 0.4);
     this.scene.add(hemisphereLight);
   }
 
