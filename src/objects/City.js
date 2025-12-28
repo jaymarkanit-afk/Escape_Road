@@ -942,9 +942,19 @@ export class City {
   dispose() {
     this.buildings.forEach((building) => {
       this.scene.remove(building);
+      // Traverse all descendants; guard against non-THREE placeholder geometry
       building.traverse((child) => {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) child.material.dispose();
+        if (child.geometry && typeof child.geometry.dispose === "function") {
+          child.geometry.dispose();
+        }
+        if (child.material) {
+          // Materials can be arrays
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m && m.dispose && m.dispose());
+          } else if (typeof child.material.dispose === "function") {
+            child.material.dispose();
+          }
+        }
       });
     });
 
@@ -956,13 +966,54 @@ export class City {
       }
       tile.roads.forEach((road) => {
         this.scene.remove(road);
-        road.geometry.dispose();
-        road.material.dispose();
+        // Some roads are Groups (lane marker collections)
+        if (
+          road.isMesh &&
+          road.geometry &&
+          typeof road.geometry.dispose === "function"
+        ) {
+          road.geometry.dispose();
+        } else if (road.traverse) {
+          road.traverse((child) => {
+            if (
+              child.geometry &&
+              typeof child.geometry.dispose === "function"
+            ) {
+              child.geometry.dispose();
+            }
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m && m.dispose && m.dispose());
+              } else if (typeof child.material.dispose === "function") {
+                child.material.dispose();
+              }
+            }
+          });
+        }
+        if (road.material && typeof road.material.dispose === "function") {
+          road.material.dispose();
+        }
       });
       tile.hazards.forEach((hazard) => {
         this.scene.remove(hazard.mesh);
-        hazard.mesh.geometry.dispose();
-        hazard.mesh.material.dispose();
+        // Hazards may be meshes; guard accordingly
+        if (hazard.mesh && hazard.mesh.traverse) {
+          hazard.mesh.traverse((child) => {
+            if (
+              child.geometry &&
+              typeof child.geometry.dispose === "function"
+            ) {
+              child.geometry.dispose();
+            }
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m) => m && m.dispose && m.dispose());
+              } else if (typeof child.material.dispose === "function") {
+                child.material.dispose();
+              }
+            }
+          });
+        }
       });
     });
 

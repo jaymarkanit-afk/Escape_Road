@@ -138,7 +138,8 @@ export class WantedSystem {
       this.scene,
       this.playerRef,
       spawnPos,
-      this.cityRef
+      this.cityRef,
+      this.enemiesArrayRef
     );
 
     // Add to main enemies array
