@@ -248,8 +248,11 @@ export class CollisionSystem {
     const effectIntensity = Math.min(1.5, 0.5 + impactSpeed / 25);
     if (this.effectsSystem) {
       this.effectsSystem.createCollisionEffect(playerPos, effectIntensity);
-      this.effectsSystem.createSparks(playerPos, { x: normalizedDx, z: normalizedDz });
-      
+      this.effectsSystem.createSparks(playerPos, {
+        x: normalizedDx,
+        z: normalizedDz,
+      });
+
       // Extra debris for high-speed crashes
       if (impactSpeed > 15) {
         setTimeout(() => {
