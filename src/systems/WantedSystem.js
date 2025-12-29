@@ -7,7 +7,14 @@
 import { EnemyChaser } from "../objects/EnemyChaser.js";
 
 export class WantedSystem {
-  constructor(scene, playerRef, enemiesArrayRef, wantedConfig, cityRef = null, skidMarkSystem = null) {
+  constructor(
+    scene,
+    playerRef,
+    enemiesArrayRef,
+    wantedConfig,
+    cityRef = null,
+    skidMarkSystem = null
+  ) {
     this.scene = scene;
     this.playerRef = playerRef;
     this.enemiesArrayRef = enemiesArrayRef; // Reference to main enemies array
@@ -212,7 +219,7 @@ export class WantedSystem {
       this.cityRef,
       this.enemiesArrayRef
     );
-    
+
     // Pass skid mark system to new police
     if (this.skidMarkSystem) {
       newPolice.setSkidMarkSystem(this.skidMarkSystem);

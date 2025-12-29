@@ -181,7 +181,9 @@ class Game {
 
     // Pass skid mark system to player and enemies
     this.player.setSkidMarkSystem(this.skidMarkSystem);
-    this.enemies.forEach(enemy => enemy.setSkidMarkSystem(this.skidMarkSystem));
+    this.enemies.forEach((enemy) =>
+      enemy.setSkidMarkSystem(this.skidMarkSystem)
+    );
 
     // Create wanted system for dynamic police spawning
     this.wantedSystem = new WantedSystem(

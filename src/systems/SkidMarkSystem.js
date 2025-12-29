@@ -12,7 +12,7 @@ export class SkidMarkSystem {
     this.skidMarks = [];
     this.maxMarks = 300; // Increased limit for longer-lasting marks
     this.markPool = [];
-    
+
     // Shared material for all skid marks
     this.skidMaterial = new THREE.MeshBasicMaterial({
       color: 0x1a1a1a,
@@ -32,8 +32,9 @@ export class SkidMarkSystem {
    */
   createSkidMark(x, z, rotation, intensity = 1.0, width = 0.15) {
     // Reuse or create new mark
-    let mark = this.markPool.length > 0 ? this.markPool.pop() : this._createNewMark();
-    
+    let mark =
+      this.markPool.length > 0 ? this.markPool.pop() : this._createNewMark();
+
     // Configure mark
     const length = 1.2; // Increased length for visibility
     mark.geometry.dispose();
@@ -43,15 +44,15 @@ export class SkidMarkSystem {
     mark.rotation.z = rotation;
     mark.material.opacity = 0.85 * intensity; // Higher opacity
     mark.visible = true;
-    
+
     // Mark lifetime and fading
     mark.userData.lifetime = 0;
     mark.userData.maxLifetime = 15000; // 15 seconds - realistic tire marks
     mark.userData.initialOpacity = 0.85 * intensity;
-    
+
     this.scene.add(mark);
     this.skidMarks.push(mark);
-    
+
     // Remove oldest if exceeding limit
     if (this.skidMarks.length > this.maxMarks) {
       this._removeMark(0);
@@ -67,49 +68,56 @@ export class SkidMarkSystem {
    * @param {boolean} isBrakingOrAccel - Is car braking or accelerating rapidly
    * @param {boolean} isSharpTurn - Is car making a sharp turn
    */
-  addCarSkidMarks(carPosition, carRotation, velocity, steering, isBrakingOrAccel = false, isSharpTurn = false) {
+  addCarSkidMarks(
+    carPosition,
+    carRotation,
+    velocity,
+    steering,
+    isBrakingOrAccel = false,
+    isSharpTurn = false
+  ) {
     const speed = Math.abs(velocity);
-    
+
     // Only create marks if car is moving with sufficient speed
     if (speed < 6) return;
-    
+
     // Calculate intensity based on realistic conditions
     let intensity = 0;
-    
+
     // Braking/Acceleration intensity - high speed + rapid speed change
     if (isBrakingOrAccel && speed > 8) {
       intensity = Math.min(1.0, speed / 22);
     }
-    
+
     // Sharp turn intensity - depends on speed and steering angle
     if (isSharpTurn) {
       const turnIntensity = Math.abs(steering) * Math.min(1.0, speed / 15);
       intensity = Math.max(intensity, turnIntensity * 1.3); // Turns create stronger marks
     }
-    
+
     // Don't create marks if intensity is too low (no significant action)
     if (intensity < 0.1) return;
-    
+
     // Create marks for rear wheels (dual marks)
     const wheelOffset = 0.8; // Distance from center to wheel
     const rearOffset = -1.5; // Distance behind center
-    
+
     // Calculate wheel positions
     const cos = Math.cos(carRotation);
     const sin = Math.sin(carRotation);
-    
+
     // Left rear wheel
     const leftX = carPosition.x + (-wheelOffset * cos - rearOffset * sin);
     const leftZ = carPosition.z + (-wheelOffset * sin + rearOffset * cos);
-    
+
     // Right rear wheel
     const rightX = carPosition.x + (wheelOffset * cos - rearOffset * sin);
     const rightZ = carPosition.z + (wheelOffset * sin + rearOffset * cos);
-    
+
     // Adjust rotation for drift angle if turning
     const driftAngle = steering * 0.3; // Slight angle based on steering
     const markRotation = carRotation + driftAngle;
-    
+
     // Create marks with increased width
     this.createSkidMark(leftX, leftZ, markRotation, intensity, 0.18);
     this.createSkidMark(rightX, rightZ, markRotation, intensity, 0.18);
@@ -144,14 +152,14 @@ export class SkidMarkSystem {
    */
   update(deltaTime) {
     const deltaMs = deltaTime * 1000;
-    
+
     for (let i = this.skidMarks.length - 1; i >= 0; i--) {
       const mark = this.skidMarks[i];
       mark.userData.lifetime += deltaMs;
-      
+
       // Calculate fade
       const fadeProgress = mark.userData.lifetime / mark.userData.maxLifetime;
-      
+
       if (fadeProgress >= 1.0) {
         // Remove completely faded marks
         this._removeMark(i);
@@ -175,13 +183,13 @@ export class SkidMarkSystem {
    * Clear all marks
    */
   clear() {
-    this.skidMarks.forEach(mark => {
+    this.skidMarks.forEach((mark) => {
       this.scene.remove(mark);
       mark.geometry.dispose();
     });
     this.skidMarks = [];
-    
-    this.markPool.forEach(mark => {
+
+    this.markPool.forEach((mark) => {
       mark.geometry.dispose();
     });
     this.markPool = [];
