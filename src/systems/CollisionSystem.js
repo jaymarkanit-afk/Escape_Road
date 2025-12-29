@@ -280,6 +280,7 @@ export class CollisionSystem {
 
   /**
    * Handle player being caught by enemy (collision response only)
+   * NEVER triggers game over - only trapped detection does that
    * @private
    */
   _handlePlayerEnemyCollision() {
@@ -293,19 +294,12 @@ export class CollisionSystem {
       this.effectsSystem.createCollisionEffect(playerPos, 1.2);
     }
 
-    // Play sound
+    // Play collision sound only (NO siren to prevent buzzing)
     if (this.soundSystem) {
-      this.soundSystem.playCollisionSound(1.0);
-      this.soundSystem.playSirenSound();
+      this.soundSystem.playCollisionSound(0.5);
     }
 
-    // Trigger callback if set
-    if (this.onPlayerHitEnemy) {
-      this.onPlayerHitEnemy();
-    }
-
-    // DO NOT trigger game over here - only trapped check does that
-    // Police collision just creates effects and physics response
+    // NO CALLBACKS - game over only via trapped detection
   }
 
   /**
@@ -717,187 +711,123 @@ export class CollisionSystem {
   }
 
   /**
-   * Check if player is completely trapped with absolutely no escape.
-   * Only triggers game over when trapped between police cars with zero movement possible.
+   * Check if player is completely boxed in by police cars.
+   * Requires 3+ police cars surrounding the player with most directions blocked.
    * @private
    */
   _checkPlayerTrapped(deltaTime, immediate = false) {
-    // Check immediately on police contact, otherwise periodically
     if (!immediate) {
       this._trappedCheckTimer = (this._trappedCheckTimer || 0) + deltaTime;
-      if (this._trappedCheckTimer < 0.15) return; // Check every 150ms for faster response
+      if (this._trappedCheckTimer < 0.15) return; // Check every 150ms
       this._trappedCheckTimer = 0;
     }
 
     const playerPos = this.playerRef.getPosition();
-    const playerVel = this.playerRef.velocity || { x: 0, z: 0 };
-    const testDistance = 3.0; // Test slightly ahead
-    const escapeMargin = 1.8; // Tight margin for escape detection
+    const enemies = this.enemiesRef || [];
+    const buildings = this.cityRef?.getBuildings?.() || [];
 
-    // Test ALL eight directions (cardinal + diagonal) for maximum fairness
-    const directions = [
-      {
-        x: Math.sin(this.playerRef.rotation),
-        z: Math.cos(this.playerRef.rotation),
-        name: "forward",
-      },
-      {
-        x: -Math.sin(this.playerRef.rotation),
-        z: -Math.cos(this.playerRef.rotation),
-        name: "backward",
-      },
-      {
-        x: Math.cos(this.playerRef.rotation),
-        z: -Math.sin(this.playerRef.rotation),
-        name: "left",
-      },
-      {
-        x: -Math.cos(this.playerRef.rotation),
-        z: Math.sin(this.playerRef.rotation),
-        name: "right",
-      },
-      // Diagonals for extra escape routes
-      {
-        x:
-          Math.sin(this.playerRef.rotation) + Math.cos(this.playerRef.rotation),
-        z:
-          Math.cos(this.playerRef.rotation) - Math.sin(this.playerRef.rotation),
-        name: "forward-left",
-      },
-      {
-        x:
-          Math.sin(this.playerRef.rotation) - Math.cos(this.playerRef.rotation),
-        z:
-          Math.cos(this.playerRef.rotation) + Math.sin(this.playerRef.rotation),
-        name: "forward-right",
-      },
-      {
-        x:
-          -Math.sin(this.playerRef.rotation) +
-          Math.cos(this.playerRef.rotation),
-        z:
-          -Math.cos(this.playerRef.rotation) -
-          Math.sin(this.playerRef.rotation),
-        name: "backward-left",
-      },
-      {
-        x:
-          -Math.sin(this.playerRef.rotation) -
-          Math.cos(this.playerRef.rotation),
-        z:
-          -Math.cos(this.playerRef.rotation) +
-          Math.sin(this.playerRef.rotation),
-        name: "backward-right",
-      },
+    // Must have at least 3 police very close
+    const closePolice = enemies.filter((e) => {
+      const ePos = e.getPosition?.() || e.position;
+      const dist = Math.sqrt((playerPos.x - ePos.x) ** 2 + (playerPos.z - ePos.z) ** 2);
+      return dist < 10;
+    });
+
+    if (closePolice.length < 3) {
+      this._trapConfirmCount = 0;
+      return; // Need 3 police minimum
+    }
+
+    // Test 8 world directions
+    const testDist = 5.0;
+    const policeBlockRadius = 5.0;
+    const playerRadius = 2.5;
+
+    const dirs = [
+      { x: 1, z: 0, n: "E" }, { x: -1, z: 0, n: "W" },
+      { x: 0, z: 1, n: "N" }, { x: 0, z: -1, n: "S" },
+      { x: 0.707, z: 0.707, n: "NE" }, { x: 0.707, z: -0.707, n: "SE" },
+      { x: -0.707, z: 0.707, n: "NW" }, { x: -0.707, z: -0.707, n: "SW" }
     ];
 
-    let blockedCount = 0;
-    let openDirections = [];
-    const buildings = this.cityRef?.getBuildings?.() || [];
-    const enemies = this.enemiesRef || [];
-    const trafficCars = this.trafficManagerRef?.getTrafficCars?.() || [];
+    let totalBlocked = 0;
+    let policeBlocked = 0;
+    const escapes = [];
 
-    for (const dir of directions) {
-      // Normalize direction
-      const len = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
-      const normX = dir.x / len;
-      const normZ = dir.z / len;
+    for (const d of dirs) {
+      const testPos = { x: playerPos.x + d.x * testDist, z: playerPos.z + d.z * testDist };
+      let blocked = false;
 
-      const testPos = {
-        x: playerPos.x + normX * testDistance,
-        z: playerPos.z + normZ * testDistance,
-      };
-
-      let isBlocked = false;
-
-      // Check buildings
-      for (const building of buildings) {
-        const halfWidth = building.geometry.parameters.width / 2 + escapeMargin;
-        const halfDepth = building.geometry.parameters.depth / 2 + escapeMargin;
-
-        if (
-          testPos.x >= building.position.x - halfWidth &&
-          testPos.x <= building.position.x + halfWidth &&
-          testPos.z >= building.position.z - halfDepth &&
-          testPos.z <= building.position.z + halfDepth
-        ) {
-          isBlocked = true;
+      // Check police first (priority)
+      for (const e of enemies) {
+        const ep = e.getPosition?.() || e.position;
+        const dist = Math.sqrt((testPos.x - ep.x) ** 2 + (testPos.z - ep.z) ** 2);
+        if (dist < policeBlockRadius) {
+          blocked = true;
+          policeBlocked++;
           break;
         }
       }
 
-      // Check police cars - primary trappers
-      if (!isBlocked) {
-        for (const enemy of enemies) {
-          const enemyPos = enemy.getPosition?.() || enemy.position;
-          const dist = Math.sqrt(
-            (testPos.x - enemyPos.x) ** 2 + (testPos.z - enemyPos.z) ** 2
-          );
-          // Police block if very close
-          if (dist < escapeMargin + 3.0) {
-            isBlocked = true;
+      // Also check buildings
+      if (!blocked) {
+        for (const b of buildings) {
+          const hw = b.geometry.parameters.width / 2 + playerRadius;
+          const hd = b.geometry.parameters.depth / 2 + playerRadius;
+          if (testPos.x >= b.position.x - hw && testPos.x <= b.position.x + hw &&
+              testPos.z >= b.position.z - hd && testPos.z <= b.position.z + hd) {
+            blocked = true;
             break;
           }
         }
       }
 
-      // Check traffic (minor blockers, don't count as heavily)
-      if (!isBlocked) {
-        for (const car of trafficCars) {
-          const carPos = car.getPosition?.() || car.position;
-          const dist = Math.sqrt(
-            (testPos.x - carPos.x) ** 2 + (testPos.z - carPos.z) ** 2
-          );
-          if (dist < escapeMargin + 1.2) {
-            isBlocked = true;
-            break;
-          }
-        }
-      }
-
-      if (isBlocked) {
-        blockedCount++;
+      if (blocked) {
+        totalBlocked++;
       } else {
-        openDirections.push(dir.name);
+        escapes.push(d.n);
       }
     }
 
-    // Player is trapped ONLY if ALL eight directions are blocked AND player is nearly stationary
-    const playerSpeed = Math.sqrt(playerVel.x ** 2 + playerVel.z ** 2);
-    const isStationary = playerSpeed < 2.0; // Almost stopped
-
-    if (blockedCount >= 8 && isStationary) {
-      // Extra confirmation: are there at least 2 police nearby?
-      const nearbyPolice = enemies.filter((e) => {
-        const ePos = e.getPosition?.() || e.position;
-        const dist = Math.sqrt(
-          (playerPos.x - ePos.x) ** 2 + (playerPos.z - ePos.z) ** 2
-        );
-        return dist < 8;
-      }).length;
-
-      if (nearbyPolice >= 2) {
-        this.playerRef.setTrapped();
-        if (this.soundSystem) {
-          this.soundSystem.playSirenSound?.();
-        }
-      }
+    // Debug when 3+ police present
+    if (closePolice.length >= 3 && totalBlocked >= 6) {
+      console.log(`Box: Police=${closePolice.length}, Blocked=${totalBlocked}/8 (P:${policeBlocked}), Escapes=[${escapes}], Count=${this._trapConfirmCount || 0}`);
     }
+
+    // Relaxed: Need 6+ directions blocked AND at least 4 blocked by police
+    if (totalBlocked < 6 || policeBlocked < 4) {
+      this._trapConfirmCount = 0;
+      return;
+    }
+
+    // Must have 3+ police forming the box
+    if (closePolice.length < 3) {
+      this._trapConfirmCount = 0;
+      return;
+    }
+
+    // Instant trigger - no confirmation delay needed
+    console.log(`🚔 BOXED IN: ${closePolice.length} police surrounded player, ${totalBlocked}/8 blocked (${policeBlocked} by police)`);
+    this.playerRef.setTrapped();
+    if (this.soundSystem) this.soundSystem.playSirenSound?.();
+    this._trapConfirmCount = 0;
   }
 
   /**
-   * Enforce player-police separation EVERY frame using Newton's laws.
-   * Prevents pass-through with extreme separation forces and multiple passes.
+   * Enforce player-police separation EVERY frame with building-aware collision resolution.
+   * Prevents pass-through while avoiding clipping into buildings.
    * @private
    */
   _enforcePlayerPoliceSeparation() {
     if (!this.enemiesRef || this.enemiesRef.length === 0) return;
 
     const playerPos = this.playerRef.getPosition();
+    const buildings = this.cityRef?.getBuildings?.() || [];
+    const playerRadius = 2.5; // Player car collision radius
 
-    // CRITICAL: Multi-pass collision resolution (3 passes per frame)
-    // This catches high-speed collisions that might slip through single checks
-    for (let pass = 0; pass < 3; pass++) {
+    // CRITICAL: Multi-pass collision resolution (2 passes per frame)
+    // Reduced from 3 to prevent excessive force accumulation
+    for (let pass = 0; pass < 2; pass++) {
       const playerBox = this.playerRef.getBoundingBox();
 
       for (const enemy of this.enemiesRef) {
@@ -909,38 +839,168 @@ export class CollisionSystem {
         const dz = playerPos.z - enemyPos.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
 
-        // ENLARGED minimum safe distance (sum of car lengths/widths + buffer)
-        const minDist = 6.0; // Increased from 4.5
+        // Minimum safe distance (sum of car lengths/widths + buffer)
+        const minDist = 5.5; // Slightly reduced from 6.0 for less aggressive pushing
 
-        // If ANY overlap or too close, apply EXTREME immediate separation
+        // If ANY overlap or too close, apply controlled separation
         if (dist < minDist) {
           const overlap = minDist - dist;
           const nx = dist > 0.01 ? dx / dist : 1;
           const nz = dist > 0.01 ? dz / dist : 0;
 
-          // EXTREME separation force - eliminates all visible overlap
-          const separationForce = overlap * 5.5; // Increased from 3.5
+          // Calculate proposed new player position
+          const baseSeparationForce = overlap * 2.5; // Reduced from 5.5 for smoother response
+          let proposedPlayerX = playerPos.x + nx * baseSeparationForce * 0.65;
+          let proposedPlayerZ = playerPos.z + nz * baseSeparationForce * 0.65;
 
-          // Player gets pushed more (lighter)
-          this.playerRef.position.x += nx * separationForce * 0.75;
-          this.playerRef.position.z += nz * separationForce * 0.75;
+          // CHECK: Would this push player into a building?
+          let wouldHitBuilding = false;
+          for (const building of buildings) {
+            const halfWidth = building.geometry.parameters.width / 2;
+            const halfDepth = building.geometry.parameters.depth / 2;
+            const buildingBuffer = playerRadius + 0.5; // Safety margin
 
-          // Enemy gets pushed less (heavier)
-          if (enemy.position) {
-            enemy.position.x -= nx * separationForce * 0.25;
-            enemy.position.z -= nz * separationForce * 0.25;
+            // Check if proposed position intersects building
+            if (
+              proposedPlayerX >=
+                building.position.x - halfWidth - buildingBuffer &&
+              proposedPlayerX <=
+                building.position.x + halfWidth + buildingBuffer &&
+              proposedPlayerZ >=
+                building.position.z - halfDepth - buildingBuffer &&
+              proposedPlayerZ <=
+                building.position.z + halfDepth + buildingBuffer
+            ) {
+              wouldHitBuilding = true;
+              break;
+            }
+          }
+
+          if (wouldHitBuilding) {
+            // SAFE MODE: Player is between police and building
+            // Instead of pushing backward, apply minimal separation and let player control
+            // This prevents violent clipping through buildings
+
+            // Option 1: Try to slide the player parallel to the collision direction
+            // Calculate perpendicular directions
+            const perpX1 = -nz;
+            const perpZ1 = nx;
+            const perpX2 = nz;
+            const perpZ2 = -nx;
+
+            // Test both perpendicular directions to find a safe one
+            const testDist = 1.5; // Small slide distance
+            const perpPos1 = {
+              x: playerPos.x + perpX1 * testDist,
+              z: playerPos.z + perpZ1 * testDist,
+            };
+            const perpPos2 = {
+              x: playerPos.x + perpX2 * testDist,
+              z: playerPos.z + perpZ2 * testDist,
+            };
+
+            let canSlidePerpendicular1 = true;
+            let canSlidePerpendicular2 = true;
+
+            for (const building of buildings) {
+              const halfWidth = building.geometry.parameters.width / 2;
+              const halfDepth = building.geometry.parameters.depth / 2;
+              const buildingBuffer = playerRadius + 0.5;
+
+              if (
+                perpPos1.x >=
+                  building.position.x - halfWidth - buildingBuffer &&
+                perpPos1.x <=
+                  building.position.x + halfWidth + buildingBuffer &&
+                perpPos1.z >=
+                  building.position.z - halfDepth - buildingBuffer &&
+                perpPos1.z <= building.position.z + halfDepth + buildingBuffer
+              ) {
+                canSlidePerpendicular1 = false;
+              }
+
+              if (
+                perpPos2.x >=
+                  building.position.x - halfWidth - buildingBuffer &&
+                perpPos2.x <=
+                  building.position.x + halfWidth + buildingBuffer &&
+                perpPos2.z >=
+                  building.position.z - halfDepth - buildingBuffer &&
+                perpPos2.z <= building.position.z + halfDepth + buildingBuffer
+              ) {
+                canSlidePerpendicular2 = false;
+              }
+            }
+
+            // Apply gentle slide in a safe perpendicular direction
+            if (canSlidePerpendicular1) {
+              this.playerRef.position.x += perpX1 * 0.3;
+              this.playerRef.position.z += perpZ1 * 0.3;
+            } else if (canSlidePerpendicular2) {
+              this.playerRef.position.x += perpX2 * 0.3;
+              this.playerRef.position.z += perpZ2 * 0.3;
+            }
+
+            // Apply minimal direct separation to prevent overlap (but won't push into building)
+            const minimalForce = Math.min(baseSeparationForce * 0.15, 0.8);
+            this.playerRef.position.x += nx * minimalForce;
+            this.playerRef.position.z += nz * minimalForce;
+
+            // Dampen player velocity significantly when trapped between police and building
+            if (this.playerRef.velocity) {
+              this.playerRef.velocity.x *= 0.5;
+              this.playerRef.velocity.z *= 0.5;
+            }
+            if (this.playerRef.speed) {
+              this.playerRef.speed *= 0.7;
+            }
+
+            // Push enemy away more since player can't move backward
+            if (enemy.position) {
+              enemy.position.x -= nx * baseSeparationForce * 0.6;
+              enemy.position.z -= nz * baseSeparationForce * 0.6;
+            }
+          } else {
+            // NORMAL MODE: Safe to push player backward
+            this.playerRef.position.x = proposedPlayerX;
+            this.playerRef.position.z = proposedPlayerZ;
+
+            // Enemy gets pushed less (heavier)
+            if (enemy.position) {
+              enemy.position.x -= nx * baseSeparationForce * 0.35;
+              enemy.position.z -= nz * baseSeparationForce * 0.35;
+            }
           }
         }
 
-        // Also apply velocity-based separation with AABB check
+        // Also apply velocity-based separation with AABB check (only if not in safe mode)
         if (checkAABBCollision(playerBox, enemyBox)) {
+          // Check if player is already near a building before applying physics
+          let nearBuilding = false;
+          for (const building of buildings) {
+            const halfWidth = building.geometry.parameters.width / 2;
+            const halfDepth = building.geometry.parameters.depth / 2;
+            const proximityCheck = playerRadius + 2.0;
+
+            if (
+              playerPos.x >= building.position.x - halfWidth - proximityCheck &&
+              playerPos.x <= building.position.x + halfWidth + proximityCheck &&
+              playerPos.z >= building.position.z - halfDepth - proximityCheck &&
+              playerPos.z <= building.position.z + halfDepth + proximityCheck
+            ) {
+              nearBuilding = true;
+              break;
+            }
+          }
+
+          // Use gentler physics if near building, normal physics otherwise
           this._resolveVehiclePair(this.playerRef, enemy, {
-            elasticity: 0.7, // Very bouncy
-            friction: 0.4, // Low friction for more bounce
-            massA: 1.0, // Player
-            massB: 2.0, // Police very heavy
-            minSeparation: 0.8, // Large separation buffer
-            pushStrength: 6.0, // EXTREME push force
+            elasticity: nearBuilding ? 0.3 : 0.5,
+            friction: nearBuilding ? 0.7 : 0.5,
+            massA: 1.0,
+            massB: 1.8, // Reduced from 2.0
+            minSeparation: nearBuilding ? 0.4 : 0.6,
+            pushStrength: nearBuilding ? 2.0 : 3.5, // Significantly reduced from 6.0
           });
         }
       }
