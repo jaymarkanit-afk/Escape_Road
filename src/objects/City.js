@@ -19,6 +19,12 @@ export class City {
     this.visibleRadius = 3; // Number of tiles to keep visible around player (3x3 = 9 tiles)
     this.lastPlayerGrid = { x: 0, z: 0 }; // Track last player grid position
 
+    // Async loading system for smooth performance
+    this.loadQueue = []; // Tiles waiting to load
+    this.loadingTiles = new Set(); // Currently loading tiles
+    this.maxLoadTimePerFrame = 6; // Max ms per frame (targeting 144fps)
+    this.buildingsPerChunk = 3; // Buildings per async chunk
+
     // Shared materials (reused across all objects to reduce texture/material count)
     this._initSharedMaterials();
 
@@ -468,7 +474,7 @@ export class City {
   }
 
   /**
-   * Create and add a tile to the scene
+   * Create and add a tile to the scene (sync version for initial load)
    * @private
    */
   _createAndAddTile(gridX, gridZ) {
@@ -482,6 +488,178 @@ export class City {
     const tile = this._createTile(gridX, gridZ);
     this.tiles.set(key, tile);
     return tile;
+  }
+
+  /**
+   * Create tile asynchronously with incremental building loading
+   * @private
+   */
+  _createTileAsync(gridX, gridZ) {
+    const key = this._getTileKey(gridX, gridZ);
+
+    if (this.tiles.has(key)) {
+      this.loadingTiles.delete(key);
+      return;
+    }
+
+    const origin = {
+      x: gridX * this.tileSize,
+      z: gridZ * this.tileSize,
+    };
+
+    const tile = {
+      gridX,
+      gridZ,
+      origin,
+      ground: null,
+      roads: [],
+      buildings: [],
+      props: [],
+    };
+
+    // Fast: Create ground and roads immediately
+    tile.ground = this._createGround(origin);
+    tile.roads = this._createRoadPatches(origin);
+
+    // Slow: Load buildings incrementally
+    this._loadBuildingsAsync(tile);
+
+    this.tiles.set(key, tile);
+    this.loadingTiles.delete(key);
+  }
+
+  /**
+   * Load buildings incrementally using exact zone logic
+   * @private
+   */
+  _loadBuildingsAsync(tile) {
+    const buildingData = this._getBuildingDataForTile(tile.origin);
+    let loaded = 0;
+
+    const loadChunk = () => {
+      const end = Math.min(
+        loaded + this.buildingsPerChunk,
+        buildingData.length
+      );
+
+      for (let i = loaded; i < end; i++) {
+        const data = buildingData[i];
+        const building = this._createBuildingByType(
+          data.type,
+          data.width,
+          data.height,
+          data.depth
+        );
+        building.position.set(data.x, data.height / 2, data.z);
+
+        tile.buildings.push(building);
+        this.buildings.push(building);
+        this.scene.add(building);
+      }
+
+      loaded = end;
+
+      if (loaded < buildingData.length) {
+        requestAnimationFrame(loadChunk);
+      } else {
+        // Buildings complete, add props
+        tile.props = this._createUrbanProps(tile.origin, tile);
+      }
+    };
+
+    requestAnimationFrame(loadChunk);
+  }
+
+  /**
+   * Get building data using EXACT zone logic from _createBuildingsForTile
+   * @private
+   */
+  _getBuildingDataForTile(origin) {
+    const data = [];
+    const roadWidth = 16;
+    const roadBuffer = 5;
+
+    // EXACT SAME ZONES as original
+    const buildingZones = [
+      {
+        xMin: -95,
+        xMax: -roadWidth - roadBuffer,
+        zMin: -95,
+        zMax: -roadWidth - roadBuffer,
+      },
+      {
+        xMin: roadWidth + roadBuffer,
+        xMax: 95,
+        zMin: -95,
+        zMax: -roadWidth - roadBuffer,
+      },
+      {
+        xMin: -95,
+        xMax: -roadWidth - roadBuffer,
+        zMin: roadWidth + roadBuffer,
+        zMax: 95,
+      },
+      {
+        xMin: roadWidth + roadBuffer,
+        xMax: 95,
+        zMin: roadWidth + roadBuffer,
+        zMax: 95,
+      },
+    ];
+
+    const spacing = 25;
+
+    buildingZones.forEach((zone) => {
+      for (let x = zone.xMin + spacing / 2; x < zone.xMax; x += spacing) {
+        for (let z = zone.zMin + spacing / 2; z < zone.zMax; z += spacing) {
+          const actualX = origin.x + x;
+          const actualZ = origin.z + z;
+
+          const buildingType = randomInt(0, 6);
+          const sizeVariation = randomInt(0, 2);
+
+          let width, height, depth;
+
+          if (sizeVariation === 0) {
+            width = randomInt(8, 12);
+            height = random(12, 22);
+          } else if (sizeVariation === 1) {
+            width = randomInt(12, 16);
+            height = random(20, 35);
+          } else {
+            width = randomInt(16, 22);
+            height = random(28, 40);
+          }
+          depth = randomInt(8, 16);
+
+          data.push({
+            x: actualX,
+            z: actualZ,
+            width,
+            height,
+            depth,
+            type: buildingType,
+          });
+        }
+      }
+    });
+
+    return data;
+  }
+
+  /**
+   * Create building by type index
+   * @private
+   */
+  _createBuildingByType(type, width, height, depth) {
+    if (type === 0) return this._createOfficeBuilding(width, height, depth);
+    if (type === 1)
+      return this._createResidentialBuilding(width, height, depth);
+    if (type === 2) return this._createShopBuilding(width, height, depth);
+    if (type === 3) return this._createModernBuilding(width, height, depth);
+    if (type === 4) return this._createBrickBuilding(width, height, depth);
+    if (type === 5) return this._createMetalBuilding(width, height, depth);
+    return this._createConcretePanelBuilding(width, height, depth);
   }
 
   /**
@@ -1265,34 +1443,46 @@ export class City {
     const currentGridX = Math.round(playerPosition.x / this.tileSize);
     const currentGridZ = Math.round(playerPosition.z / this.tileSize);
 
+    // Always process load queue
+    this._processLoadQueue();
+
     // Only update tiles if player has moved to a new grid cell
     if (
       currentGridX === this.lastPlayerGrid.x &&
       currentGridZ === this.lastPlayerGrid.z
     ) {
-      return; // No tile updates needed
+      return;
     }
 
     this.lastPlayerGrid.x = currentGridX;
     this.lastPlayerGrid.z = currentGridZ;
 
-    // Determine which tiles should be visible
+    // Queue tiles by distance (load closest first)
     const tilesToKeep = new Set();
-    for (let dx = -this.visibleRadius; dx <= this.visibleRadius; dx++) {
-      for (let dz = -this.visibleRadius; dz <= this.visibleRadius; dz++) {
-        const gridX = currentGridX + dx;
-        const gridZ = currentGridZ + dz;
-        const key = this._getTileKey(gridX, gridZ);
-        tilesToKeep.add(key);
+    const newTiles = [];
 
-        // Create tile if it doesn't exist yet
-        if (!this.tiles.has(key)) {
-          this._createAndAddTile(gridX, gridZ);
+    for (let distance = 0; distance <= this.visibleRadius; distance++) {
+      for (let dx = -distance; dx <= distance; dx++) {
+        for (let dz = -distance; dz <= distance; dz++) {
+          if (Math.abs(dx) === distance || Math.abs(dz) === distance) {
+            const gridX = currentGridX + dx;
+            const gridZ = currentGridZ + dz;
+            const key = this._getTileKey(gridX, gridZ);
+            tilesToKeep.add(key);
+
+            if (!this.tiles.has(key) && !this.loadingTiles.has(key)) {
+              newTiles.push({ gridX, gridZ, distance });
+              this.loadingTiles.add(key);
+            }
+          }
         }
       }
     }
 
-    // Remove tiles that are too far away
+    // Add to queue
+    this.loadQueue.push(...newTiles);
+
+    // Async cleanup of distant tiles
     const tilesToRemove = [];
     for (const [key, tile] of this.tiles.entries()) {
       if (!tilesToKeep.has(key)) {
@@ -1300,10 +1490,50 @@ export class City {
       }
     }
 
-    // Clean up distant tiles to free memory
-    tilesToRemove.forEach(({ gridX, gridZ }) => {
-      this._removeTile(gridX, gridZ);
-    });
+    if (tilesToRemove.length > 0) {
+      this._asyncCleanup(tilesToRemove);
+    }
+  }
+
+  /**
+   * Process load queue with time-slicing
+   * @private
+   */
+  _processLoadQueue() {
+    if (this.loadQueue.length === 0) return;
+
+    const startTime = performance.now();
+    while (
+      this.loadQueue.length > 0 &&
+      performance.now() - startTime < this.maxLoadTimePerFrame
+    ) {
+      const tile = this.loadQueue.shift();
+      this._createTileAsync(tile.gridX, tile.gridZ);
+    }
+  }
+
+  /**
+   * Async cleanup in idle time
+   * @private
+   */
+  _asyncCleanup(tilesToRemove) {
+    const cleanup = () => {
+      const start = performance.now();
+      let i = 0;
+      while (i < tilesToRemove.length && performance.now() - start < 3) {
+        this._removeTile(tilesToRemove[i].gridX, tilesToRemove[i].gridZ);
+        i++;
+      }
+      if (i < tilesToRemove.length) {
+        setTimeout(() => this._asyncCleanup(tilesToRemove.slice(i)), 50);
+      }
+    };
+
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(cleanup, { timeout: 100 });
+    } else {
+      setTimeout(cleanup, 16);
+    }
   }
 
   /**
