@@ -7,12 +7,13 @@
 import { EnemyChaser } from "../objects/EnemyChaser.js";
 
 export class WantedSystem {
-  constructor(scene, playerRef, enemiesArrayRef, wantedConfig, cityRef = null) {
+  constructor(scene, playerRef, enemiesArrayRef, wantedConfig, cityRef = null, skidMarkSystem = null) {
     this.scene = scene;
     this.playerRef = playerRef;
     this.enemiesArrayRef = enemiesArrayRef; // Reference to main enemies array
     this.config = wantedConfig;
     this.cityRef = cityRef; // Reference to city for building collision
+    this.skidMarkSystem = skidMarkSystem; // Reference to skid mark system
 
     // Wanted level state
     this.currentWantedLevel = 1; // Start at 1 star
@@ -211,6 +212,11 @@ export class WantedSystem {
       this.cityRef,
       this.enemiesArrayRef
     );
+    
+    // Pass skid mark system to new police
+    if (this.skidMarkSystem) {
+      newPolice.setSkidMarkSystem(this.skidMarkSystem);
+    }
 
     // Add to main enemies array
     this.enemiesArrayRef.push(newPolice);

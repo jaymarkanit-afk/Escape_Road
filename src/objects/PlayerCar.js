@@ -28,6 +28,9 @@ export class PlayerCar {
     this.modelLoaded = false;
     this.isFalling = false;
     this.fallSpeed = 0;
+    this.skidMarkSystem = null; // Skid mark system reference
+    this.skidMarkTimer = 0; // Timer to control skid mark frequency
+    this.previousSpeed = 0; // Track previous speed for acceleration/braking detection
     // Building collision crash state (physics-based crash system)
     this.isCrashed = false;
     this.crashStunTimer = 0; // Brief moment of being stunned after crash
@@ -218,6 +221,44 @@ export class PlayerCar {
     this._applyInput(deltaTime);
     this._updatePosition(deltaTime);
     this._updateMesh();
+    
+    // Create skid marks if conditions are met
+    if (this.skidMarkSystem && this.modelLoaded) {
+      this.skidMarkTimer += deltaTime;
+      // Create marks every 0.05 seconds (20 times per second) for smooth trails
+      if (this.skidMarkTimer >= 0.05) {
+        const speedDiff = this.speed - this.previousSpeed;
+        const absSpeed = Math.abs(this.speed);
+        
+        // Detect realistic braking (any deceleration at moderate speed)
+        const isBraking = (speedDiff < -0.1 && absSpeed > 6) || this.input.backward;
+        
+        // Detect rapid acceleration (boost or initial acceleration)
+        const isAccelerating = (speedDiff > 0.15 && absSpeed > 8) || this.boostActive;
+        
+        // Get steering input
+        const steering = (this.input.left ? 1 : 0) - (this.input.right ? 1 : 0);
+        
+        // Detect sharp turn (steering at moderate to high speed)
+        const isSharpTurn = Math.abs(steering) > 0.3 && absSpeed > 10;
+        
+        // Only create marks if one of the realistic conditions is met
+        if (isBraking || isAccelerating || isSharpTurn) {
+          this.skidMarkSystem.addCarSkidMarks(
+            this.position,
+            this.rotation,
+            this.speed,
+            steering,
+            isBraking || isAccelerating,
+            isSharpTurn
+          );
+        }
+        
+        this.previousSpeed = this.speed;
+        this.skidMarkTimer = 0;
+      }
+    }
+    
     const distDelta =
       Math.sqrt(
         this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z
@@ -398,6 +439,11 @@ export class PlayerCar {
   setInput(input) {
     this.input = { ...input };
   }
+  
+  setSkidMarkSystem(system) {
+    this.skidMarkSystem = system;
+  }
+  
   getPosition() {
     return { ...this.position };
   }

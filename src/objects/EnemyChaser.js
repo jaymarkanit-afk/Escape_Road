@@ -45,6 +45,9 @@ export class EnemyChaser {
       z: (Math.random() - 0.5) * 4,
     };
     this.blockTimer = 0; // Active cutoff maneuver time
+    this.skidMarkSystem = null; // Skid mark system reference
+    this.skidMarkTimer = 0; // Timer to control skid mark frequency
+    this.previousSpeed = 0; // Track previous speed for acceleration/braking detection
     this._loadAndCreateMesh();
   }
 
@@ -188,6 +191,44 @@ export class EnemyChaser {
 
     // Update mesh
     this._updateMesh();
+    
+    // Create skid marks if conditions are met
+    if (this.skidMarkSystem && this.modelLoaded) {
+      this.skidMarkTimer += deltaTime;
+      // Create marks every 0.05 seconds (20 times per second)
+      if (this.skidMarkTimer >= 0.05) {
+        const currentSpeed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
+        const speedDiff = currentSpeed - this.previousSpeed;
+        
+        // Calculate rotation difference (how sharply they're turning)
+        let rotDiff = this.targetRotation - this.rotation;
+        while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+        while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+        const steering = Math.abs(rotDiff) / Math.PI; // Normalize to 0-1
+        
+        // Police cars skid when:
+        // 1. Rapid acceleration during pursuit
+        const isAccelerating = speedDiff > 0.25 && currentSpeed > 12;
+        // 2. Hard braking to avoid obstacles or cornering
+        const isBraking = speedDiff < -0.25 && currentSpeed > 8;
+        // 3. Sharp turns during aggressive pursuit
+        const isSharpTurn = steering > 0.35 && currentSpeed > 12;
+        
+        if (isAccelerating || isBraking || isSharpTurn) {
+          this.skidMarkSystem.addCarSkidMarks(
+            this.position,
+            this.rotation,
+            currentSpeed,
+            steering,
+            isBraking || isAccelerating,
+            isSharpTurn
+          );
+        }
+        
+        this.previousSpeed = currentSpeed;
+        this.skidMarkTimer = 0;
+      }
+    }
   }
 
   /**
@@ -517,6 +558,13 @@ export class EnemyChaser {
    */
   getPosition() {
     return { ...this.position };
+  }
+  
+  /**
+   * Set skid mark system reference
+   */
+  setSkidMarkSystem(system) {
+    this.skidMarkSystem = system;
   }
 
   /**
