@@ -430,16 +430,18 @@ export class EnemyChaser {
    * Get bounding box for collision detection
    */
   getBoundingBox() {
+    // Enlarged bounding box with padding to ensure no pass-through
+    const padding = 0.5; // Extra padding for safety
     return {
       min: {
-        x: this.position.x - ENEMY_CONFIG.WIDTH / 2,
+        x: this.position.x - (ENEMY_CONFIG.WIDTH / 2 + padding),
         y: 0,
-        z: this.position.z - ENEMY_CONFIG.LENGTH / 2,
+        z: this.position.z - (ENEMY_CONFIG.LENGTH / 2 + padding),
       },
       max: {
-        x: this.position.x + ENEMY_CONFIG.WIDTH / 2,
+        x: this.position.x + (ENEMY_CONFIG.WIDTH / 2 + padding),
         y: ENEMY_CONFIG.HEIGHT,
-        z: this.position.z + ENEMY_CONFIG.LENGTH / 2,
+        z: this.position.z + (ENEMY_CONFIG.LENGTH / 2 + padding),
       },
     };
   }

@@ -12,7 +12,6 @@ export class PlayerCar {
     this.rotation = Math.PI; // Start facing forward (negative Z direction) - Math.PI = 180 degrees
     this.speed = 0; // Current speed (starts at 0, accelerates over time)
     this.targetSpeed = 0; // Target speed to accelerate towards
-    this.health = PLAYER_CONFIG.MAX_HEALTH;
     this.isAlive = true;
     this.boostActive = false;
     this.boostCooldownRemaining = 0;
@@ -34,9 +33,8 @@ export class PlayerCar {
     this.crashStunTimer = 0; // Brief moment of being stunned after crash
     this.crashReverseTimer = 0; // Auto-reverse after stun
     this.crashReverseDirection = { x: 0, z: 0 };
-    // Caught by police state
-    this.isCaught = false;
-    this.caughtTimer = 0;
+    // Trapped state (completely cornered with no escape)
+    this.isTrapped = false;
     this._loadAndCreateMesh();
   }
 
@@ -123,15 +121,9 @@ export class PlayerCar {
   update(deltaTime) {
     if (!this.isAlive || !this.modelLoaded || !this.mesh) return;
 
-    // Handle caught state countdown
-    if (this.isCaught) {
-      this.caughtTimer -= deltaTime;
-      if (this.caughtTimer <= 0) {
-        // Finally caught after 3 seconds
-        this.die();
-      }
-      // Disable input while being caught
-      this._updateMesh();
+    // Handle trapped state (fully cornered with no escape)
+    if (this.isTrapped) {
+      this.die();
       return;
     }
 
@@ -292,19 +284,18 @@ export class PlayerCar {
     this.boostActive = true;
     this.boostTimeRemaining = PLAYER_CONFIG.BOOST_DURATION;
     // Create boost glow by brightening the car color
-    this.mesh.children[0].material.color.setHex(0xff6633);
+    if (this.mesh && this.mesh.children[0] && this.mesh.children[0].material && this.mesh.children[0].material.color) {
+      this.mesh.children[0].material.color.setHex(0xff6633);
+    }
   }
 
   deactivateBoost() {
     this.boostActive = false;
     this.boostCooldownRemaining = PLAYER_CONFIG.BOOST_COOLDOWN;
     // Restore original car color
-    this.mesh.children[0].material.color.setHex(COLORS.PLAYER_CAR);
-  }
-
-  takeDamage(amount) {
-    this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this.die();
+    if (this.mesh && this.mesh.children[0] && this.mesh.children[0].material && this.mesh.children[0].material.color) {
+      this.mesh.children[0].material.color.setHex(COLORS.PLAYER_CAR);
+    }
   }
 
   die() {
@@ -312,10 +303,9 @@ export class PlayerCar {
     this.speed = 0;
   }
 
-  setCaught() {
-    if (!this.isCaught) {
-      this.isCaught = true;
-      this.caughtTimer = 3.0; // 3 second countdown
+  setTrapped() {
+    if (!this.isTrapped) {
+      this.isTrapped = true;
     }
   }
 
@@ -348,16 +338,18 @@ export class PlayerCar {
   }
 
   getBoundingBox() {
+    // Enlarged bounding box with padding to ensure no pass-through
+    const padding = 0.5; // Extra padding for safety
     return {
       min: {
-        x: this.position.x - PLAYER_CONFIG.WIDTH / 2,
+        x: this.position.x - (PLAYER_CONFIG.WIDTH / 2 + padding),
         y: 0,
-        z: this.position.z - PLAYER_CONFIG.LENGTH / 2,
+        z: this.position.z - (PLAYER_CONFIG.LENGTH / 2 + padding),
       },
       max: {
-        x: this.position.x + PLAYER_CONFIG.WIDTH / 2,
+        x: this.position.x + (PLAYER_CONFIG.WIDTH / 2 + padding),
         y: PLAYER_CONFIG.HEIGHT,
-        z: this.position.z + PLAYER_CONFIG.LENGTH / 2,
+        z: this.position.z + (PLAYER_CONFIG.LENGTH / 2 + padding),
       },
     };
   }
@@ -370,9 +362,6 @@ export class PlayerCar {
   }
   getSpeed() {
     return Math.abs(this.speed);
-  }
-  getHealthPercent() {
-    return (this.health / PLAYER_CONFIG.MAX_HEALTH) * 100;
   }
   canBoost() {
     return this.boostCooldownRemaining <= 0;
