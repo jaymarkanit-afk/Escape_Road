@@ -729,7 +729,9 @@ export class CollisionSystem {
     // Must have at least 3 police very close
     const closePolice = enemies.filter((e) => {
       const ePos = e.getPosition?.() || e.position;
-      const dist = Math.sqrt((playerPos.x - ePos.x) ** 2 + (playerPos.z - ePos.z) ** 2);
+      const dist = Math.sqrt(
+        (playerPos.x - ePos.x) ** 2 + (playerPos.z - ePos.z) ** 2
+      );
       return dist < 10;
     });
 
@@ -744,10 +746,14 @@ export class CollisionSystem {
     const playerRadius = 2.5;
 
     const dirs = [
-      { x: 1, z: 0, n: "E" }, { x: -1, z: 0, n: "W" },
-      { x: 0, z: 1, n: "N" }, { x: 0, z: -1, n: "S" },
-      { x: 0.707, z: 0.707, n: "NE" }, { x: 0.707, z: -0.707, n: "SE" },
-      { x: -0.707, z: 0.707, n: "NW" }, { x: -0.707, z: -0.707, n: "SW" }
+      { x: 1, z: 0, n: "E" },
+      { x: -1, z: 0, n: "W" },
+      { x: 0, z: 1, n: "N" },
+      { x: 0, z: -1, n: "S" },
+      { x: 0.707, z: 0.707, n: "NE" },
+      { x: 0.707, z: -0.707, n: "SE" },
+      { x: -0.707, z: 0.707, n: "NW" },
+      { x: -0.707, z: -0.707, n: "SW" },
     ];
 
     let totalBlocked = 0;
@@ -755,13 +761,18 @@ export class CollisionSystem {
     const escapes = [];
 
     for (const d of dirs) {
-      const testPos = { x: playerPos.x + d.x * testDist, z: playerPos.z + d.z * testDist };
+      const testPos = {
+        x: playerPos.x + d.x * testDist,
+        z: playerPos.z + d.z * testDist,
+      };
       let blocked = false;
 
       // Check police first (priority)
       for (const e of enemies) {
         const ep = e.getPosition?.() || e.position;
-        const dist = Math.sqrt((testPos.x - ep.x) ** 2 + (testPos.z - ep.z) ** 2);
+        const dist = Math.sqrt(
+          (testPos.x - ep.x) ** 2 + (testPos.z - ep.z) ** 2
+        );
         if (dist < policeBlockRadius) {
           blocked = true;
           policeBlocked++;
@@ -774,8 +785,12 @@ export class CollisionSystem {
         for (const b of buildings) {
           const hw = b.geometry.parameters.width / 2 + playerRadius;
           const hd = b.geometry.parameters.depth / 2 + playerRadius;
-          if (testPos.x >= b.position.x - hw && testPos.x <= b.position.x + hw &&
-              testPos.z >= b.position.z - hd && testPos.z <= b.position.z + hd) {
+          if (
+            testPos.x >= b.position.x - hw &&
+            testPos.x <= b.position.x + hw &&
+            testPos.z >= b.position.z - hd &&
+            testPos.z <= b.position.z + hd
+          ) {
             blocked = true;
             break;
           }
@@ -791,7 +806,13 @@ export class CollisionSystem {
 
     // Debug when 3+ police present
     if (closePolice.length >= 3 && totalBlocked >= 6) {
-      console.log(`Box: Police=${closePolice.length}, Blocked=${totalBlocked}/8 (P:${policeBlocked}), Escapes=[${escapes}], Count=${this._trapConfirmCount || 0}`);
+      console.log(
+        `Box: Police=${
+          closePolice.length
+        }, Blocked=${totalBlocked}/8 (P:${policeBlocked}), Escapes=[${escapes}], Count=${
+          this._trapConfirmCount || 0
+        }`
+      );
     }
 
     // Relaxed: Need 6+ directions blocked AND at least 4 blocked by police
@@ -807,7 +828,9 @@ export class CollisionSystem {
     }
 
     // Instant trigger - no confirmation delay needed
-    console.log(`🚔 BOXED IN: ${closePolice.length} police surrounded player, ${totalBlocked}/8 blocked (${policeBlocked} by police)`);
+    console.log(
+      `🚔 BOXED IN: ${closePolice.length} police surrounded player, ${totalBlocked}/8 blocked (${policeBlocked} by police)`
+    );
     this.playerRef.setTrapped();
     if (this.soundSystem) this.soundSystem.playSirenSound?.();
     this._trapConfirmCount = 0;
